@@ -1,4 +1,4 @@
-"""Training metrics: computation (``mfu/``, ``norms``) and transport (``metrics_logger``).
+"""Training metrics: computation (``norms``) and transport (``metrics_logger``).
 
 Dependency rule: this package is a leaf. It must not import from
 ``wall_x.trainer.adapters`` or ``wall_x.trainer.fsdp_trainer`` -- both of
