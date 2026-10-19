@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 try:
     from external_accel import (
         qwen35_update_joint_attention_flash_mask as _external_accel_update_flash_mask,
+    )
+    from external_accel import (
         qwen35_update_position_ids as _external_accel_update_position_ids,
     )
 except Exception:

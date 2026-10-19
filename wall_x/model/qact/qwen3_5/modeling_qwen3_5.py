@@ -27,8 +27,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as cp
 from torch import nn
-
-from . import initialization as init
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache
 from transformers.generation import GenerationMixin
@@ -61,23 +59,41 @@ from transformers.utils.import_utils import (
     is_flash_linear_attention_available,
 )
 from transformers.utils.output_capturing import capture_outputs
-from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
+from wall_x.model.core.attention.selector import AttentionsSelectorMixin
 from wall_x.model.core.ops import (
     adarmsnorm as adarmsnorm_op,
+)
+from wall_x.model.core.ops import (
     add_rmsnorm as add_rmsnorm_op,
+)
+from wall_x.model.core.ops import (
     gated_rmsnorm as gated_rmsnorm_op,
+)
+from wall_x.model.core.ops import (
     pos_embed_interp as pos_embed_interp_op,
+)
+from wall_x.model.core.ops import (
     qwen35_get_rope_index as qwen35_get_rope_index_op,
-    rope,
+)
+from wall_x.model.core.ops import (
     rmsnorm as rmsnorm_op,
+)
+from wall_x.model.core.ops import (
+    rope,
+)
+from wall_x.model.core.ops import (
     rot_pos_emb as rot_pos_emb_op,
+)
+from wall_x.model.core.ops import (
     silu_and_mul as silu_and_mul_op,
 )
-from wall_x.model.core.attention.selector import AttentionsSelectorMixin
 from wall_x.model.core.ops.gated_delta import (
     preprocess_gated_delta_inputs,
 )
+
+from . import initialization as init
+from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update

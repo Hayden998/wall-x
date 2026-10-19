@@ -4,25 +4,77 @@ LeRobot Dataset Loader - Distributed Version
 
 import logging
 import os
+from typing import Protocol, SupportsIndex, TypeVar
+
 import numpy as np
 import torch
-from torch.utils.data import DistributedSampler, random_split
 from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
-from typing import Protocol, SupportsIndex, TypeVar
 from qwen_vl_utils.vision_process import smart_resize
-from wall_x.data.backends.lerobot.config import LerobotConfig
-from wall_x.data.backends.lerobot.utils import (
-    process_grounding_points,
-    get_wallx_normal_text,
-    replace_action_token,
-    preprocesser_call,
-    load_norm_stats,
-)
-
+from torch.utils.data import DistributedSampler, random_split
 from transformers import AutoProcessor
+
+from wall_x._vendor.x2robot_utils.geometry import (
+    canonicalize_euler_zyx_batch_nb,
+    euler_to_matrix_zyx_batch_nb,
+    matrix_to_euler_zyx_batch_nb,
+    so3_to_matrix_batch_nb,
+)
+from wall_x.data.backends.lerobot.config import LerobotConfig
+from wall_x.data.backends.lerobot.rotation_layout import (
+    LAYOUT_SKIP_KEYS,
+    maybe_convert_euler_to_6d,
+)
+from wall_x.data.backends.lerobot.rotation_layout import (
+    euler_layout_dim as _euler_layout_dim,
+)
+from wall_x.data.backends.lerobot.rotation_layout import (
+    layout_uses_6d_rotation as _layout_uses_6d_rotation,
+)
+from wall_x.data.backends.lerobot.utils import (
+    get_wallx_normal_text,
+    load_norm_stats,
+    preprocesser_call,
+    process_grounding_points,
+    replace_action_token,
+)
 
 T_co = TypeVar("T_co", covariant=True)
 logger = logging.getLogger(__name__)
+
+RELATIVE_KEYWORD = "relative"
+ROTATION_KEYWORD = "rotation"
+RELATIVE_SKIP_KEYS = LAYOUT_SKIP_KEYS
+
+
+def _compute_delta_from_state_and_abs_rot(
+    rotations: np.ndarray, state: np.ndarray
+) -> np.ndarray:
+    """Relative rotation: R_rel = R_abs @ R_state^T."""
+    if rotations.shape[-1] == 3:
+        rotations_matrix = euler_to_matrix_zyx_batch_nb(rotations)
+        out_is_euler = True
+    elif rotations.shape[-1] == 6:
+        rotations_matrix = so3_to_matrix_batch_nb(rotations)
+        out_is_euler = False
+    else:
+        raise ValueError(
+            f"Only 3D euler or 6D rotation supported, got {rotations.shape[-1]}D"
+        )
+
+    if state.shape[-1] == 3:
+        state_matrix = euler_to_matrix_zyx_batch_nb(state[np.newaxis, :])[0]
+    elif state.shape[-1] == 6:
+        state_matrix = so3_to_matrix_batch_nb(state[np.newaxis, :])[0]
+    else:
+        raise ValueError(
+            f"Only 3D euler or 6D rotation supported, got {state.shape[-1]}D"
+        )
+
+    r_rel = np.matmul(rotations_matrix, state_matrix.T)
+    if out_is_euler:
+        d_euler = matrix_to_euler_zyx_batch_nb(r_rel)
+        return canonicalize_euler_zyx_batch_nb(d_euler)
+    return r_rel[:, :2, :].reshape(r_rel.shape[0], 6)
 
 
 # Abstract class for dataset
@@ -87,6 +139,86 @@ class PreprocessedDataset(Dataset[T_co]):
         self._state_key_mapping = self.key_mappings
         self._action_key_mapping = self.key_mappings
 
+        task_cfg = self.config.get("task") or {}
+        self._dof_config = self.config.get("dof_config") or task_cfg.get(
+            "dof_config", {}
+        )
+        self._agent_pos_config = self.config.get("agent_pos_config") or task_cfg.get(
+            "agent_pos_config", {}
+        )
+        self._use_relative_action = any(
+            RELATIVE_KEYWORD in key for key in self._dof_config
+        )
+        self._convert_action_euler_to_6d = _layout_uses_6d_rotation(self._dof_config)
+        self._convert_state_euler_to_6d = _layout_uses_6d_rotation(
+            self._agent_pos_config
+        )
+        if self._convert_action_euler_to_6d or self._convert_state_euler_to_6d:
+            logger.info(
+                "LeRobot loader: Euler->6D rotation enabled "
+                "(action=%s, state=%s; raw action dim=%s -> %s)",
+                self._convert_action_euler_to_6d,
+                self._convert_state_euler_to_6d,
+                (
+                    _euler_layout_dim(self._dof_config)
+                    if self._convert_action_euler_to_6d
+                    else "-"
+                ),
+                (
+                    sum(
+                        d
+                        for k, d in self._dof_config.items()
+                        if k not in RELATIVE_SKIP_KEYS
+                    )
+                    if self._convert_action_euler_to_6d
+                    else "-"
+                ),
+            )
+
+    def _maybe_convert_euler_to_6d(self, vec, layout_config: dict, enabled: bool):
+        converted = maybe_convert_euler_to_6d(vec, layout_config, enabled)
+        if (
+            enabled
+            and layout_config
+            and isinstance(vec, torch.Tensor)
+            and converted is not vec
+        ):
+            return torch.as_tensor(converted, dtype=vec.dtype, device=vec.device)
+        return converted
+
+    def _to_relative_action(self, action, agent_pos):
+        """Convert absolute action horizon to deltas w.r.t. current agent_pos."""
+        action = np.asarray(action, dtype=np.float64)
+        agent_pos = np.asarray(agent_pos, dtype=np.float64)
+        if action.ndim == 1:
+            action = action[np.newaxis, :]
+        if agent_pos.ndim > 1:
+            agent_pos = agent_pos.reshape(-1)
+
+        parts = []
+        cur = 0
+        for key, dim in self._dof_config.items():
+            if key in RELATIVE_SKIP_KEYS:
+                continue
+            action_clip = action[:, cur : cur + dim]
+            agent_pos_clip = agent_pos[cur : cur + dim]
+            if RELATIVE_KEYWORD not in key:
+                parts.append(action_clip)
+            elif ROTATION_KEYWORD in key:
+                parts.append(
+                    _compute_delta_from_state_and_abs_rot(
+                        action_clip.astype(np.float64),
+                        agent_pos_clip.astype(np.float64),
+                    )
+                )
+            else:
+                parts.append(action_clip - agent_pos_clip[np.newaxis, :])
+            cur += dim
+
+        if not parts:
+            return action
+        return np.concatenate(parts, axis=1).astype(np.float32)
+
     def _vision_preprocess(self, frames):
         processed_frames = []
         for key in self.hf_dataset.meta.camera_keys:
@@ -129,6 +261,33 @@ class PreprocessedDataset(Dataset[T_co]):
         image_inputs, h, w, resize_h, resize_w = self._vision_preprocess(data)
         agent_pos = data[self._state_key_mapping["state"]]
         action = data[self._action_key_mapping["action"]]
+        # Drop trailing unused DOFs (e.g. velocity/height/head) when config
+        # only trains arms and relies on action_padding for the 26-D slot.
+        state_active = sum(
+            int(d)
+            for k, d in self._agent_pos_config.items()
+            if k not in RELATIVE_SKIP_KEYS
+        )
+        action_active = sum(
+            int(d) for k, d in self._dof_config.items() if k not in RELATIVE_SKIP_KEYS
+        )
+        if state_active and agent_pos.shape[-1] > state_active:
+            agent_pos = agent_pos[..., :state_active]
+        if action_active and action.shape[-1] > action_active:
+            action = action[..., :action_active]
+        agent_pos = self._maybe_convert_euler_to_6d(
+            agent_pos, self._agent_pos_config, self._convert_state_euler_to_6d
+        )
+        action = self._maybe_convert_euler_to_6d(
+            action, self._dof_config, self._convert_action_euler_to_6d
+        )
+        if self._use_relative_action:
+            device = action.device if isinstance(action, torch.Tensor) else None
+            action = torch.as_tensor(
+                self._to_relative_action(action, agent_pos),
+                dtype=torch.float32,
+                device=device,
+            )
         frame_index = data["frame_index"]
         instruction_info = {"instruction": data["task"]}
         generate_subtask_ratio = self.data_config.generate_subtask_ratio
@@ -199,7 +358,7 @@ class PreprocessedDataset(Dataset[T_co]):
             ),
             pin_memory=True,  # Enable for GPU training
             persistent_workers=num_workers > 0,  # Only if num_workers > 0
-            prefetch_factor=2,  # Reduce memory usage
+            prefetch_factor=2 if num_workers > 0 else None,
             drop_last=True,  # Avoid incomplete batches
         )
 
@@ -235,7 +394,7 @@ class PreprocessedDataset(Dataset[T_co]):
             ),
             pin_memory=True,
             persistent_workers=num_workers > 0,
-            prefetch_factor=2,
+            prefetch_factor=2 if num_workers > 0 else None,
             drop_last=False,
         )
 
@@ -274,6 +433,13 @@ class DataCollator:
         self.beta_alpha = float(self.beta_alpha)
         self.beta_beta = float(self.beta_beta)
         self.use_fast_tokenizer = self.config.get("use_fast_tokenizer", False)
+        # ``state_string_placeholder_only`` keeps <|propri|> as a bare token
+        # (no state digits) for checkpoints trained before state strings
+        # were wired into the LeRobot path.
+        self.use_state_string_representation = bool(
+            self.config.get("use_state_string_representation", False)
+        ) and not bool(self.config.get("state_string_placeholder_only", False))
+        self.state_bins = int(self.config.get("state_bins", 256))
         self.load_processor()
 
     def load_processor(self):
@@ -369,7 +535,7 @@ class DataCollator:
         additional_inputs = {}
 
         # Tail-pad widths when dof_config / agent_pos_config (sum) is larger
-        # than the lerobot action/state — typical when resuming a ckpt that
+        # than the lerobot action/state - typical when resuming a ckpt that
         # was pretrained on a bigger action space. Extra columns are filled
         # with zeros and their mask set to 0 so loss is not propagated.
         dof_total = int(self.config.get("dof_total_dim", 0) or 0)
@@ -475,6 +641,14 @@ class DataCollator:
             truncation=True,
             return_tensors="pt",
             max_length=self.dataload_config.get("max_length", 768),
+            norm_state=(
+                additional_inputs["proprioception"]
+                if self.use_state_string_representation
+                and "proprioception" in additional_inputs
+                else None
+            ),
+            agent_pos_mask=additional_inputs.get("agent_pos_mask"),
+            state_bins=self.state_bins,
         )
 
         action_token_id = self.processor.tokenizer.convert_tokens_to_ids("<|action|>")
@@ -562,7 +736,17 @@ def load_lerobot_data(
     assert (
         norm_stats_path is not None
     ), "norm stats is required, please refer to 'wall-x/scripts/compute_norm_stats.py' to compute stats"
-    norm_stats = load_norm_stats(norm_stats_path, key_mappings)
+    task_cfg = config.get("task") or {}
+    dof_config = config.get("dof_config") or task_cfg.get("dof_config", {})
+    agent_pos_config = config.get("agent_pos_config") or task_cfg.get(
+        "agent_pos_config", {}
+    )
+    norm_stats = load_norm_stats(
+        norm_stats_path,
+        key_mappings,
+        dof_config=dof_config,
+        agent_pos_config=agent_pos_config,
+    )
 
     delta_timestamps = {
         # action chunk

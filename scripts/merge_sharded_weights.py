@@ -6,9 +6,10 @@ Works around the StorageMeta compatibility issue between PyTorch versions.
 
 import os
 import sys
-import torch
 from pathlib import Path
 from typing import Dict
+
+import torch
 from safetensors.torch import save_file
 
 

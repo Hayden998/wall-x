@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-
 CAPABILITY_JPEG_NDARRAY_V1 = "jpeg_ndarray_v1"
 
 

@@ -11,7 +11,11 @@ from wall_x.serving.keyframe_memory.grammar import (
     SelectionTokens,
     parse_selection,
 )
-from wall_x.serving.keyframe_memory.prompts import IMAGE, inject_memory, selection_prompt
+from wall_x.serving.keyframe_memory.prompts import (
+    IMAGE,
+    inject_memory,
+    selection_prompt,
+)
 from wall_x.serving.keyframe_memory.state import (
     Frame,
     KeyframeBank,
@@ -37,10 +41,14 @@ def ring(now, span=60):
 # ----------------------------------------------------------------------
 def test_window_candidates_memory_and_writable():
     bank = KeyframeBank(KeyframeMemoryConfig())
-    state = MemoryState(ring=ring(96), memory=[Frame(10, IMG), Frame(60, IMG)], last_select_frame=48)
+    state = MemoryState(
+        ring=ring(96), memory=[Frame(10, IMG), Frame(60, IMG)], last_select_frame=48
+    )
     window = bank.window(state)
     # start=48, span=48: candidate i sits at 48 + int((i + 0.5) * 3)
-    assert [f.index for f in window.candidates] == [48 + int((i + 0.5) * 3) for i in range(16)]
+    assert [f.index for f in window.candidates] == [
+        48 + int((i + 0.5) * 3) for i in range(16)
+    ]
     # memory inside the candidate window is hidden from the selector
     assert [f.index for f in window.memory] == [10]
     # writable: newer than the last selection (48) and older than now
@@ -58,10 +66,14 @@ def test_writable_excludes_frames_before_last_selection():
 def test_commit_dedups_trims_and_counts_skips():
     cfg = KeyframeMemoryConfig(capacity=2)
     bank = KeyframeBank(cfg)
-    state = MemoryState(ring=ring(96), memory=[Frame(50, IMG)], boxes={50: (1, 2, 3, 4)})
+    state = MemoryState(
+        ring=ring(96), memory=[Frame(50, IMG)], boxes={50: (1, 2, 3, 4)}
+    )
     window = bank.window(state)
     # slot 0 -> frame 49 duplicates 50; slots 5 and 10 are new
-    written = bank.commit(state, window, Selection(write=True, slots=(10, 0, 5), boxes={5: (5, 6, 7, 8)}))
+    written = bank.commit(
+        state, window, Selection(write=True, slots=(10, 0, 5), boxes={5: (5, 6, 7, 8)})
+    )
     assert written == [window.candidates[5].index, window.candidates[10].index]
     assert [f.index for f in state.memory] == written  # capacity 2 drops frame 50
     assert state.boxes == {window.candidates[5].index: (5, 6, 7, 8)}
@@ -111,8 +123,21 @@ def test_skip_and_write_without_boxes():
 
 def test_box_digits_and_budget_merge():
     g = SelectionGrammar(TOKENS, 0, max_writes=1, boxes=True)
-    digits = lambda s: [DIGITS[int(c)] for c in s]
-    answer = [WRITE, SLOTS[1], OPEN] + digits("12") + [COMMA] + digits("5") + [MID] + digits("300") + [COMMA] + digits("40") + [CLOSE]
+
+    def digits(s):
+        return [DIGITS[int(c)] for c in s]
+
+    answer = (
+        [WRITE, SLOTS[1], OPEN]
+        + digits("12")
+        + [COMMA]
+        + digits("5")
+        + [MID]
+        + digits("300")
+        + [COMMA]
+        + digits("40")
+        + [CLOSE]
+    )
 
     def prefs(gen):
         nxt = answer[len(gen)] if len(gen) < len(answer) else END
@@ -135,7 +160,20 @@ def test_digit_count_is_bounded():
 
 
 def test_degenerate_box_is_dropped():
-    out = [WRITE, SLOTS[0], OPEN, DIGITS[5], COMMA, DIGITS[5], MID, DIGITS[1], COMMA, DIGITS[9], CLOSE, END]
+    out = [
+        WRITE,
+        SLOTS[0],
+        OPEN,
+        DIGITS[5],
+        COMMA,
+        DIGITS[5],
+        MID,
+        DIGITS[1],
+        COMMA,
+        DIGITS[9],
+        CLOSE,
+        END,
+    ]
     sel = parse_selection(TOKENS, out, 0.0)
     assert sel.slots == (0,) and sel.boxes == {}
 
@@ -158,11 +196,16 @@ def test_selection_prompt_layout():
 
 def test_inject_memory():
     prefix = "user\nObservation: face_view: X"
-    assert inject_memory(prefix, num_memory=0, num_short_term=0, frame=None, label="m") == prefix
-    assert inject_memory(prefix, num_memory=0, num_short_term=0, frame=7, label="m") == (
-        "user\nObservation: now[f7]: face_view: X"
+    assert (
+        inject_memory(prefix, num_memory=0, num_short_term=0, frame=None, label="m")
+        == prefix
     )
-    assert inject_memory(prefix, num_memory=2, num_short_term=1, frame=None, label="progress memory") == (
+    assert inject_memory(
+        prefix, num_memory=0, num_short_term=0, frame=7, label="m"
+    ) == ("user\nObservation: now[f7]: face_view: X")
+    assert inject_memory(
+        prefix, num_memory=2, num_short_term=1, frame=None, label="progress memory"
+    ) == (
         f"user\nObservation: progress memory: [M_0]: {IMAGE} [M_1]: {IMAGE}"
         f" Recent view: {IMAGE} now: face_view: X"
     )
@@ -183,7 +226,11 @@ def test_crop_rect_expands_and_keeps_minimum_side():
 # Wire protocol
 # ----------------------------------------------------------------------
 def request(now, prev, *, mem=(), last=0, history=None, **state):
-    hist = history if history is not None else list(range(1 if prev is None else prev + 1, now + 1))
+    hist = (
+        history
+        if history is not None
+        else list(range(1 if prev is None else prev + 1, now + 1))
+    )
     return {
         "sim_frame": now,
         "kfmem_history": [{"sim_frame": f, "face_view": IMG} for f in hist],
@@ -191,7 +238,10 @@ def request(now, prev, *, mem=(), last=0, history=None, **state):
             "version": 1,
             "context_key": "ep_0",
             "prev_sim_frame": prev,
-            "ring": [{"sim_frame": f, "face_view": IMG} for f in range(max(0, now - 60), now + 1)],
+            "ring": [
+                {"sim_frame": f, "face_view": IMG}
+                for f in range(max(0, now - 60), now + 1)
+            ],
             "mem": [{"sim_frame": f, "face_view": IMG} for f in mem],
             "last_sel_frame": last,
             "consec_skip": 0,
@@ -204,7 +254,11 @@ def request(now, prev, *, mem=(), last=0, history=None, **state):
 
 def test_protocol_round_trip():
     cfg = KeyframeMemoryConfig()
-    req = parse_request(request(80, 64, mem=(30,), last=48, mem_boxes={"30": [1, 2, 3, 4]}), max_advance=16, config=cfg)
+    req = parse_request(
+        request(80, 64, mem=(30,), last=48, mem_boxes={"30": [1, 2, 3, 4]}),
+        max_advance=16,
+        config=cfg,
+    )
     assert req.state.now == 80 and [f.index for f in req.state.memory] == [30]
     assert req.client_boxes == {30: (1, 2, 3, 4)}
     req.state.boxes = dict(req.client_boxes)
@@ -246,16 +300,21 @@ def test_protocol_names_the_missing_field():
 # ----------------------------------------------------------------------
 # RoboDojo memory policy (no model)
 # ----------------------------------------------------------------------
-from types import SimpleNamespace
+from types import SimpleNamespace  # noqa: E402
 
-from wall_x.serving.robodojo.memory_policy import ClientRng, KeyframeMemoryRoboDojoPolicy
-from wall_x.serving.robodojo.policy import RoboDojoPolicyConfig
-from wall_x.serving.robodojo.serve import trained_with_keyframe_memory
+from wall_x.serving.robodojo.memory_policy import (  # noqa: E402
+    ClientRng,
+    KeyframeMemoryRoboDojoPolicy,
+)
+from wall_x.serving.robodojo.policy import RoboDojoPolicyConfig  # noqa: E402
+from wall_x.serving.robodojo.serve import trained_with_keyframe_memory  # noqa: E402
 
 
 def test_replan_steps_beyond_protocol_bound_is_rejected_before_loading():
     with pytest.raises(ValueError, match="replan_steps <= 48"):
-        KeyframeMemoryRoboDojoPolicy(RoboDojoPolicyConfig(checkpoint_path="/nonexistent", replan_steps=64))
+        KeyframeMemoryRoboDojoPolicy(
+            RoboDojoPolicyConfig(checkpoint_path="/nonexistent", replan_steps=64)
+        )
 
 
 def test_client_rng_without_cuda():
@@ -293,22 +352,33 @@ def _policy():
 def test_policy_returns_state_and_falls_back_to_cached_boxes():
     policy = _policy()
     first = request(16, None, history=list(range(1, 17)))
-    policy._pending = (None, "go", "imitate_sorting_sequence",
-                       parse_request(first, max_advance=16, config=policy.memory_config))
+    policy._pending = (
+        None,
+        "go",
+        "imitate_sorting_sequence",
+        parse_request(first, max_advance=16, config=policy.memory_config),
+    )
     out = policy.get_action()
     assert out["actions"] == ["action"]
     assert out["kfmem_state"]["mem_frame_ids"] == [16]
     assert out["kfmem_state"]["mem_boxes"] == {"16": [1, 2, 3, 4]}
     # next request without echoed boxes: the server-side cache supplies them
     second = request(32, 16, mem=(16,))
-    policy._pending = (None, "go", "imitate_sorting_sequence",
-                       parse_request(second, max_advance=16, config=policy.memory_config))
+    policy._pending = (
+        None,
+        "go",
+        "imitate_sorting_sequence",
+        parse_request(second, max_advance=16, config=policy.memory_config),
+    )
     policy.get_action()
     assert policy.model.seen_boxes[-1] == {16: (1, 2, 3, 4)}
 
 
 def test_memory_autodetection_reads_the_resolved_epilogue():
     def cfg(epilogue):
-        return SimpleNamespace(data_config=SimpleNamespace(epilogue_processor_type=epilogue))
+        return SimpleNamespace(
+            data_config=SimpleNamespace(epilogue_processor_type=epilogue)
+        )
+
     assert trained_with_keyframe_memory(cfg("keyframe_memory_packing"))
     assert not trained_with_keyframe_memory(cfg("wallx"))

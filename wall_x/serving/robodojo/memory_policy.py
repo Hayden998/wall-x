@@ -162,7 +162,9 @@ class KeyframeMemoryRoboDojoPolicy(WallXRoboDojoPolicy):
             self._remember_boxes(request)
         return {
             "actions": self._actions(output["robot_state_action_data"]),
-            RESPONSE_KEY: response_state(request, rng_state=rng_state, include_boxes=boxes),
+            RESPONSE_KEY: response_state(
+                request, rng_state=rng_state, include_boxes=boxes
+            ),
         }
 
     # ------------------------------------------------------------------

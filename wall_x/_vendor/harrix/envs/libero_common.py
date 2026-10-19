@@ -43,6 +43,53 @@ def _get_libero_wrist_image(obs: dict) -> np.ndarray:
     return obs["robot0_eye_in_hand_image"][::-1, ::-1]
 
 
+def get_rollout_frame(obs: dict) -> np.ndarray:
+    """Return one RGB frame for rollout MP4 saving."""
+    return np.asarray(_get_libero_image(obs), dtype=np.uint8)
+
+
+def _sanitize_task_description(task_description: str, max_len: int = 50) -> str:
+    return (
+        task_description.lower()
+        .replace(" ", "_")
+        .replace("\n", "_")
+        .replace(".", "_")[:max_len]
+    )
+
+
+def save_rollout_video(
+    rollout_dir: str,
+    rollout_images: list[np.ndarray],
+    *,
+    task_id: int,
+    episode_idx: int,
+    success: bool,
+    task_description: str,
+    fps: int = 30,
+) -> str | None:
+    """Save an MP4 replay of one LIBERO episode."""
+    if not rollout_images:
+        return None
+
+    import os
+
+    import imageio
+
+    os.makedirs(rollout_dir, exist_ok=True)
+    task_slug = _sanitize_task_description(task_description)
+    mp4_path = os.path.join(
+        rollout_dir,
+        f"task{task_id}_ep{episode_idx}--success={int(success)}--{task_slug}.mp4",
+    )
+    writer = imageio.get_writer(mp4_path, fps=fps, macro_block_size=1)
+    try:
+        for img in rollout_images:
+            writer.append_data(np.asarray(img, dtype=np.uint8))
+    finally:
+        writer.close()
+    return mp4_path
+
+
 def _quat2axisangle(quat) -> np.ndarray:
     """Convert an xyzw quaternion to a 3D axis-angle vector."""
     if quat[3] > 1.0:

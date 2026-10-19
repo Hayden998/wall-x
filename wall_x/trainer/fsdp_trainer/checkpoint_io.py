@@ -23,8 +23,8 @@ from torch.distributed.checkpoint.state_dict import (
 )
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from wall_x.trainer.optimizer.dmuon import is_dmuon_model
 from wall_x.trainer.fsdp_trainer import checkpoint_transaction
+from wall_x.trainer.optimizer.dmuon import is_dmuon_model
 
 _module_logger = logging.getLogger(__name__)
 
@@ -489,9 +489,7 @@ def _legacy_step_checkpoint(checkpoint_path: str, current_epoch: int) -> bool:
     )
 
 
-def validate_resume_data_cursor(
-    trainer_state: dict, *, has_data_cursor: bool
-) -> None:
+def validate_resume_data_cursor(trainer_state: dict, *, has_data_cursor: bool) -> None:
     """Reject an incomplete checkpoint that cannot restore data progress."""
 
     if not bool(trainer_state["epoch_complete"]) and not has_data_cursor:
@@ -554,9 +552,7 @@ def load_trainer_state(checkpoint_path: str) -> dict:
                 "current_epoch"
             ]
         )
-        legacy_step_checkpoint = _legacy_step_checkpoint(
-            checkpoint_path, current_epoch
-        )
+        legacy_step_checkpoint = _legacy_step_checkpoint(checkpoint_path, current_epoch)
         start_epoch = current_epoch + int(not legacy_step_checkpoint)
     else:
         raise ValueError(

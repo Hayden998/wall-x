@@ -1,11 +1,9 @@
-from typing import Optional, Union, Dict
-
-from packaging import version
-
-from transformers.modeling_utils import AttentionInterface
-from transformers.utils import logging, is_torch_xla_available
+from typing import Dict, Optional, Union
 
 import torch
+from packaging import version
+from transformers.modeling_utils import AttentionInterface
+from transformers.utils import is_torch_xla_available, logging
 
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
 logger = logging.get_logger(__name__)

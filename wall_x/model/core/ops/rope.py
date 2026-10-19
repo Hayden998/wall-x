@@ -4,6 +4,7 @@ import logging
 from typing import List
 
 import torch
+
 from wall_x.model.core.ops.base import OpsProxy
 
 logger = logging.getLogger(__name__)
@@ -285,7 +286,15 @@ class RotPosEmbOp(OpsProxy):
         try:
             from wall_x.model.core.ops._cuda_wrappers import RotPos
 
-            return RotPos()
+            kernel = RotPos()
+
+            def rot_pos(
+                inv_freq, grid_thw, spatial_merge_size, total_output_tokens=None
+            ):
+                del total_output_tokens
+                return kernel(inv_freq.float(), grid_thw, spatial_merge_size)
+
+            return rot_pos
         except ImportError:
             return None
         except Exception as e:

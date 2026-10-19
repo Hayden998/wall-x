@@ -15,8 +15,8 @@ from .hyperparams_config import (
 from .infra_config import (
     CheckpointConfig,
     DebugConfig,
-    DMuonBackendConfig,
     DistributedConfig,
+    DMuonBackendConfig,
     FSDPBackendConfig,
     LoggingConfig,
     ShardedBackendConfig,

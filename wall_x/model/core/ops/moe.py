@@ -7,6 +7,7 @@ Mixture-of-Experts processing.
 import logging
 
 import torch
+
 from wall_x.model.core.action.layout import TwoExpertLayout
 from wall_x.model.core.ops.base import OpsProxy
 
@@ -161,11 +162,15 @@ class TwoExpertPackOp(OpsProxy):
                     raise RuntimeError("two_expert_pack expects input shape [B, S, D]")
                 flat = tokens.reshape(-1, tokens.shape[-1])
                 if layout.token_perm_inv is None:
-                    raise RuntimeError("packed TwoExpertLayout is missing inverse permutation")
+                    raise RuntimeError(
+                        "packed TwoExpertLayout is missing inverse permutation"
+                    )
                 perm = layout.token_perm.to(device=flat.device)
                 perm_inv = layout.token_perm_inv.to(device=flat.device)
                 if perm.numel() != flat.shape[0]:
-                    raise RuntimeError("packed TwoExpertLayout does not cover all tokens")
+                    raise RuntimeError(
+                        "packed TwoExpertLayout does not cover all tokens"
+                    )
                 return _PermGatherPack.apply(flat, perm, perm_inv)
             return super().__call__(
                 tokens,
@@ -248,14 +253,20 @@ class TwoExpertUnpackOp(OpsProxy):
                 if packed_tokens.dim() != 2:
                     raise RuntimeError("two_expert_unpack expects input shape [B*S, D]")
                 if layout.token_perm_inv is None:
-                    raise RuntimeError("packed TwoExpertLayout is missing inverse permutation")
+                    raise RuntimeError(
+                        "packed TwoExpertLayout is missing inverse permutation"
+                    )
                 perm = layout.token_perm.to(device=packed_tokens.device)
                 perm_inv = layout.token_perm_inv.to(device=packed_tokens.device)
                 total = int(batch_size) * int(seq_length)
                 if perm.numel() != total or packed_tokens.shape[0] != total:
-                    raise RuntimeError("packed TwoExpertLayout does not cover all tokens")
+                    raise RuntimeError(
+                        "packed TwoExpertLayout does not cover all tokens"
+                    )
                 out = _PermGatherUnpack.apply(packed_tokens, perm, perm_inv)
-                return out.view(int(batch_size), int(seq_length), packed_tokens.shape[-1])
+                return out.view(
+                    int(batch_size), int(seq_length), packed_tokens.shape[-1]
+                )
             return super().__call__(
                 packed_tokens,
                 batch_size,

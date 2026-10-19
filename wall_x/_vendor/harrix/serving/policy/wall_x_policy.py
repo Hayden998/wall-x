@@ -13,6 +13,7 @@ from wall_x._vendor.harrix.infer.robot import (
     TurtleRobotPreprocessor,
     EX001RobotPreprocessor,
 )
+from wall_x._vendor.harrix.serving.policy._smoothing import apply_smoothing
 from wall_x._vendor.harrix.serving.protocol import rtc
 from wall_x.utils.timers import ScopeTimer
 
@@ -76,13 +77,16 @@ class WallXPolicy(BasePolicy):
         self.instruction_override = instruction_override
         logger.info(
             "Image passing mode: %s, robot_type: %s, default_infer_mode: %s, "
-            "ar_do_sample: %s, ar_temperature: %s, instruction_override: %r",
+            "ar_do_sample: %s, ar_temperature: %s, instruction_override: %r, "
+            "smooth_action: %s, smooth_gripper: %s",
             self.image_passing_mode,
             config.robot_type,
             self.default_infer_mode,
             self.ar_do_sample,
             self.ar_temperature,
             self.instruction_override,
+            config.smooth_action,
+            config.smooth_gripper,
         )
         self._maybe_warmup_rtc()
 
@@ -247,6 +251,25 @@ class WallXPolicy(BasePolicy):
             f"Unsupported infer_mode={mode!r}, expected one of {ACTION_INFER_MODES}"
         )
 
+    def _apply_smoothing(self, model_output: Dict[str, Any]) -> None:
+        """Apply Laplacian smoothing on predict_action before 6D->euler conversion."""
+        cfg = self.config
+        if not getattr(cfg, "smooth_action", False):
+            return
+        keys = getattr(cfg.data_config, "predict_action_keys", None)
+        train_cfg = getattr(cfg, "train_config", {}) or {}
+        dof_config = train_cfg.get("dof_config") or (
+            train_cfg.get("task", {}) or {}
+        ).get("dof_config", {})
+        apply_smoothing(
+            model_output,
+            smooth_action=True,
+            smooth_gripper=cfg.smooth_gripper,
+            predict_action_keys=list(keys or dof_config.keys()),
+            action_padding_dof=dof_config.get("action_padding"),
+            action_dim=cfg.action_dim,
+        )
+
     def _rtc_dof_segments(self) -> "rtc.DofSegments":
         """Build the DoF segment table of the server action layout (for RTC abs-to-relative conversion)."""
         from wall_x._vendor.harrix.infer.base_dataclass import dof_dims
@@ -366,6 +389,9 @@ class WallXPolicy(BasePolicy):
                 rtc_kwargs=rtc_kwargs,
             )
 
+        # RTC chunks are already constrained to the previous chunk's prefix.
+        if rtc_kwargs is None:
+            self._apply_smoothing(model_output)
         if not self.serialize_actions:
             return model_output
 
@@ -466,6 +492,7 @@ class WallXPolicy(BasePolicy):
 
             results = []
             for model_output in model_outputs:
+                self._apply_smoothing(model_output)
                 if self.serialize_actions:
                     action = self.robot_preprocessor.get_serialized_actions(
                         model_output, robot_action_interpolate_multiplier=1

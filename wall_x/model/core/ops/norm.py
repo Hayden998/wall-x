@@ -5,6 +5,7 @@ import logging
 
 import torch
 import torch.nn.functional as F
+
 from wall_x.model.core.ops.base import OpsProxy
 
 logger = logging.getLogger(__name__)

@@ -503,6 +503,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
             self._data_config.use_state_string_representation
             if is_dataset_v2
             else self._typed_cfg.task.use_state_string_representation
+            and not getattr(self._typed_cfg.data, "state_string_placeholder_only", False)
         )
         state_was_injected = bool(use_state_string and state_keep_dims)
         if state_was_injected:

@@ -5,15 +5,14 @@ import torch.distributed as dist
 from tqdm import tqdm
 
 from wall_x.trainer.adapters.base_adapter import ModelAdapter
+from wall_x.trainer.optimizer.dmuon import is_dmuon_model
 from wall_x.trainer.trainer_utils import (
     compute_action_metrics,
-    load_wallx_processors_from_cfg,
     load_qwen_pretrain_weight,
+    load_wallx_processors_from_cfg,
     save_text_results_to_file,
 )
-from wall_x.trainer.optimizer.dmuon import is_dmuon_model
 from wall_x.utils.constant import is_action_dataset_name
-
 
 _MISSING = object()
 
@@ -119,9 +118,9 @@ class VLAdapter(ModelAdapter):
         # ``data:`` section.  Leaving this field absent here makes the Qwen
         # configs default it to False and creates ``action_processor.propri_proj``
         # even when task.use_state_string_representation is True.
-        flat["data"]["use_state_string_representation"] = (
-            self.cfg.task.use_state_string_representation
-        )
+        flat["data"][
+            "use_state_string_representation"
+        ] = self.cfg.task.use_state_string_representation
         flat["dof_config"] = self.cfg.task.dof_config
         flat["agent_pos_config"] = self.cfg.task.agent_pos_config
         if self.cfg.task.ar_dof_config is not None:
@@ -500,9 +499,7 @@ class VLAdapter(ModelAdapter):
                 channel_loss_sums[dataset_name_i] = loss_sum
                 channel_counts[dataset_name_i] = cout_sum
                 if cout_sum >= 0.5:
-                    step_stats[f"channel_loss_{dataset_name_i}"] = (
-                        loss_sum / cout_sum
-                    )
+                    step_stats[f"channel_loss_{dataset_name_i}"] = loss_sum / cout_sum
 
             ar_action_loss_weight = self.get_output_field(
                 outputs, "ar_action_loss_weight"
@@ -547,9 +544,7 @@ class VLAdapter(ModelAdapter):
                     else 0.0
                 )
                 step_stats["ar_action_ce"] = (
-                    ar_action_loss_sum / ar_action_count
-                    if ar_action_count > 0
-                    else 0.0
+                    ar_action_loss_sum / ar_action_count if ar_action_count > 0 else 0.0
                 )
 
             if "action_accuracy" in channel_keys and tokenizer_mixin is not None:

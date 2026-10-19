@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-
 T = TypeVar("T")
 
 _DATA_CONFIG_REGISTRY: dict[str, type[Any]] = {}

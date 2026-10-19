@@ -1,13 +1,13 @@
+import logging
+import os
 import time
-from torch.cuda import nvtx
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
+from functools import wraps
 from typing import List
 
 import torch
-from functools import wraps
-from contextlib import nullcontext
-import logging
-import os
+from torch.cuda import nvtx
 
 logger = logging.getLogger(__name__)
 

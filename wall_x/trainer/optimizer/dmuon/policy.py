@@ -7,7 +7,6 @@ from typing import Callable, Iterable, Optional
 import torch
 from torch import nn
 
-
 RouteHintFn = Callable[[str, nn.Parameter], Optional[str]]
 
 WALLX_ACTION_FP32_PREFIXES = (

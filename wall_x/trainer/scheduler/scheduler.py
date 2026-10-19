@@ -1,6 +1,7 @@
-from torch.optim.lr_scheduler import LambdaLR
-from torch.optim import Optimizer
 import math
+
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LambdaLR
 
 
 def create_cosine_scheduler(

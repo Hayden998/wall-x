@@ -28,19 +28,35 @@ def optional_float(value: str) -> float | None:
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--checkpoint-path", required=True)
     p.add_argument("--train-config-path", help="Defaults to <checkpoint>/config.yml.")
-    p.add_argument("--norm-key", required=True, help="Normalizer key in the checkpoint's norm stats.")
+    p.add_argument(
+        "--norm-key",
+        required=True,
+        help="Normalizer key in the checkpoint's norm stats.",
+    )
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=19000)
     p.add_argument("--model-device", default="cuda")
     p.add_argument("--robot-type", default="desktop")
-    p.add_argument("--action-horizon", type=int, help="Defaults to the checkpoint's action horizon.")
+    p.add_argument(
+        "--action-horizon",
+        type=int,
+        help="Defaults to the checkpoint's action horizon.",
+    )
     p.add_argument("--num-inference-timesteps", type=int, default=10)
     p.add_argument("--action-start-index", type=int, default=0)
-    p.add_argument("--replan-steps", type=int, default=16, help="Actions returned per request.")
-    p.add_argument("--default-instruction", default="", help="Used when an observation has no instruction.")
+    p.add_argument(
+        "--replan-steps", type=int, default=16, help="Actions returned per request."
+    )
+    p.add_argument(
+        "--default-instruction",
+        default="",
+        help="Used when an observation has no instruction.",
+    )
     p.add_argument("--enable-jpeg-ndarray-v1", action="store_true")
     p.add_argument("--ws-ping-interval-s", type=optional_float, default=None)
     p.add_argument("--ws-ping-timeout-s", type=optional_float, default=None)
@@ -54,8 +70,12 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="auto: on for checkpoints trained with keyframe_memory_packing.",
     )
     memory.add_argument("--memory-capacity", type=int, help="Memory bank size.")
-    memory.add_argument("--memory-candidates", type=int, help="Candidate frames per selection.")
-    memory.add_argument("--memory-select-stride", type=int, help="Frames between selections.")
+    memory.add_argument(
+        "--memory-candidates", type=int, help="Candidate frames per selection."
+    )
+    memory.add_argument(
+        "--memory-select-stride", type=int, help="Frames between selections."
+    )
     memory.add_argument(
         "--memory-tasks",
         help="Comma-separated tasks that use memory (default: all tasks).",

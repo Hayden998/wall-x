@@ -1,40 +1,36 @@
-from transformers.integrations import use_kernelized_func
+from typing import Callable
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Callable
-
 from transformers.activations import ACT2FN
+from transformers.integrations import use_kernelized_func
 from transformers.utils import logging
 from transformers.utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_linear_attention_available,
 )
+
+from wall_x.model.core.action.layout import TwoExpertLayout, prepare_two_expert_layout
+from wall_x.model.core.ops import two_expert_pack, two_expert_unpack
+from wall_x.model.core.ops.gated_delta import preprocess_gated_delta_inputs
 from wall_x.model.qact.qwen3_5.configuration_qwen3_5 import Qwen3_5Config
 from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
+    ALL_ATTENTION_FUNCTIONS,
+    Cache,
+    FlashAttentionKwargs,
+    Qwen3_5DynamicCache,
     Qwen3_5RMSNorm,
     Qwen3_5RMSNormGated,
-    apply_rotary_pos_emb,
-    Qwen3_5DynamicCache,
-    apply_mask_to_padding_states,
-)
-from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
-    ALL_ATTENTION_FUNCTIONS,
-    FlashAttentionKwargs,
-    Cache,
     Unpack,
+    apply_mask_to_padding_states,
+    apply_rotary_pos_emb,
     eager_attention_forward,
     is_fast_path_available,
-)
-from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
     torch_causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
-from wall_x.model.core.action.layout import TwoExpertLayout, prepare_two_expert_layout
-from wall_x.model.core.ops import two_expert_pack, two_expert_unpack
-from wall_x.model.core.ops.gated_delta import preprocess_gated_delta_inputs
-
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update

@@ -10,15 +10,17 @@ import json
 import logging
 import os
 import sys
-import torch
 from datetime import datetime
+
+import torch
+import wandb
+
 from wall_x.config.loader import load_config as load_typed_config
 from wall_x.trainer.fsdp_trainer import (
     FSDPTrainer,
     cleanup_distributed,
     is_main_process,
 )
-import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +46,8 @@ def _log_failure_diagnostics(trainer, device):
             "free_gib": free_bytes / (1024**3),
             "allocated_gib": torch.cuda.memory_allocated(device) / (1024**3),
             "reserved_gib": torch.cuda.memory_reserved(device) / (1024**3),
-            "peak_allocated_gib": torch.cuda.max_memory_allocated(device)
-            / (1024**3),
-            "peak_reserved_gib": torch.cuda.max_memory_reserved(device)
-            / (1024**3),
+            "peak_allocated_gib": torch.cuda.max_memory_allocated(device) / (1024**3),
+            "peak_reserved_gib": torch.cuda.max_memory_reserved(device) / (1024**3),
         }
     except Exception as diagnostic_error:
         diagnostics["gpu_diagnostics_error"] = (

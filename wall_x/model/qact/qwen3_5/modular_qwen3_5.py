@@ -18,11 +18,6 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 from torch import nn
-
-from . import initialization as init
-from wall_x.model.core.ops.gated_delta import (
-    preprocess_gated_delta_inputs,
-)
 from transformers.cache_utils import Cache
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_layers import GradientCheckpointingLayer
@@ -32,15 +27,6 @@ from transformers.modeling_outputs import (
 )
 from transformers.modeling_rope_utils import RopeParameters
 from transformers.modeling_utils import PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
-from transformers.utils.generic import merge_with_config_defaults
-from transformers.utils.output_capturing import capture_outputs
 from transformers.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from transformers.models.qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from transformers.models.qwen3_next.modeling_qwen3_next import (
@@ -65,7 +51,21 @@ from transformers.models.qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
+from transformers.processing_utils import Unpack
+from transformers.utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
+from transformers.utils.generic import merge_with_config_defaults
+from transformers.utils.output_capturing import capture_outputs
 
+from wall_x.model.core.ops.gated_delta import (
+    preprocess_gated_delta_inputs,
+)
+
+from . import initialization as init
 
 logger = logging.get_logger(__name__)
 

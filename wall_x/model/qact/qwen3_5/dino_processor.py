@@ -108,7 +108,10 @@ class DinoVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(
-        self, image_processor: DinoImageProcessor, merge_size: int | None = None, **kwargs
+        self,
+        image_processor: DinoImageProcessor,
+        merge_size: int | None = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.image_processor = image_processor

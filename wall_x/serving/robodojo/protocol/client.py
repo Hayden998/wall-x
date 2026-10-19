@@ -142,7 +142,11 @@ class PolicyEvalClient:
                 )
                 self._recv_task = asyncio.create_task(self._recv_loop())
                 logger.info("websocket connected: %s", self.config.url)
-                _status("CONNECTED", _GREEN, f"websocket policy server connected: {self.config.url}")
+                _status(
+                    "CONNECTED",
+                    _GREEN,
+                    f"websocket policy server connected: {self.config.url}",
+                )
                 if handshake:
                     return await self.hello(evaluation_plan=evaluation_plan)
                 return None
@@ -287,10 +291,20 @@ class PolicyEvalClient:
             await self._ws.send(encode_frame(frame))
         except Exception:
             self._pending.pop(request_id, None)
-            if not _reconnect_attempted and not self._closed and msg_type != MessageType.HELLO:
-                _status("RECONNECT", _YELLOW, f"send failed for {msg_type.value}; reconnecting to {self.config.url}")
+            if (
+                not _reconnect_attempted
+                and not self._closed
+                and msg_type != MessageType.HELLO
+            ):
+                _status(
+                    "RECONNECT",
+                    _YELLOW,
+                    f"send failed for {msg_type.value}; reconnecting to {self.config.url}",
+                )
                 await self._reset_connection_state()
-                await self.connect(handshake=True, evaluation_plan=self._evaluation_plan)
+                await self.connect(
+                    handshake=True, evaluation_plan=self._evaluation_plan
+                )
                 return await self.request(
                     msg_type,
                     payload,
@@ -310,13 +324,20 @@ class PolicyEvalClient:
             raise WsError(ErrorCode.TIMEOUT, f"timeout waiting for {expected}") from exc
         except Exception:
             self._pending.pop(request_id, None)
-            if self._ws is None and not _reconnect_attempted and not self._closed and msg_type != MessageType.HELLO:
+            if (
+                self._ws is None
+                and not _reconnect_attempted
+                and not self._closed
+                and msg_type != MessageType.HELLO
+            ):
                 _status(
                     "RECONNECT",
                     _YELLOW,
                     f"connection dropped while waiting for {msg_type.value}; reconnecting to {self.config.url}",
                 )
-                await self.connect(handshake=True, evaluation_plan=self._evaluation_plan)
+                await self.connect(
+                    handshake=True, evaluation_plan=self._evaluation_plan
+                )
                 return await self.request(
                     msg_type,
                     payload,

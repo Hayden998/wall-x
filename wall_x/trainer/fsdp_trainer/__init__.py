@@ -3,19 +3,17 @@
 from wall_x.trainer.fsdp_trainer.base_trainer import (
     BaseDistributedTrainer,
     DistributedTrainer,
-    setup_distributed,
+    all_gather,
+    all_reduce,
+    barrier,
     cleanup_distributed,
+    get_local_rank,
     get_rank,
     get_world_size,
-    get_local_rank,
     is_main_process,
-    barrier,
-    all_reduce,
-    all_gather,
+    setup_distributed,
 )
-
 from wall_x.trainer.fsdp_trainer.fsdp_trainer import FSDPTrainer
-
 
 __all__ = [
     # Base classes and utilities

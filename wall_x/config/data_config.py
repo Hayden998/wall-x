@@ -58,15 +58,10 @@ class LeRobotDataConfig(DataConfig):
     noise_scheduler: Optional[Dict[str, Any]] = None
     # --- qwen preprocess knobs (read by prompt/state encoding) ---
     state_bins: int = 256
+    # Keep <|propri|> as a bare token even when task.use_state_string_representation
+    # is on; matches checkpoints trained before LeRobot state strings existed.
+    state_string_placeholder_only: bool = False
     use_embodied_system_prompt_ratio: float = 0.0
-    # --- wall-wm lerobot fields ---
-    image_history_length: int = 1
-    obs_history_stride: int = 0
-    event_level: bool = False
-    image_horizon: int = 16
-    future_image_length: int = 16
-    future_image_interval: int = 2
-    action_history_length: int = 1
 
 
 __all__ = [

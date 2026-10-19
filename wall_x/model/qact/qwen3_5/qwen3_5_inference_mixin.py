@@ -1,9 +1,9 @@
 import logging
 import os
+from typing import Optional
 
 import numpy as np
 import torch
-from typing import Optional
 from torchdiffeq import odeint
 
 from wall_x.model.core.refiner import RefinerConfig, refine

@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 # external_accel build does not ship this kernel yet, so dispatch resolves to the
 # PyTorch fallback below.
 try:
-    from external_accel import qwen35_rvq_position_ids as _external_accel_rvq_position_ids
+    from external_accel import (
+        qwen35_rvq_position_ids as _external_accel_rvq_position_ids,
+    )
 except Exception:
     _external_accel_rvq_position_ids = None
 

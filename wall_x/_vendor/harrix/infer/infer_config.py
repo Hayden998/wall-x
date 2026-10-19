@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 _SUPPORTED_ROBOT_TYPES = ("desktop", "turtle", "ex001")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 def resolve_prompt_dataset_family(norm_key: str) -> str:
     """Return the dataset family used to build the inference prompt."""
     return norm_key
@@ -111,6 +118,10 @@ class InferConfig:
         robot_id: str | None = None,
         model_type: str = "wallx",
         artifact_path_remaps: dict[str, str] | None = None,
+        # Laplacian smoothing of the predicted chunk; env WALLX_SMOOTH_ACTION /
+        # WALLX_SMOOTH_GRIPPER override these.
+        smooth_action: bool = False,
+        smooth_gripper: bool = True,
     ):
         # private attributes for storing paths
         assert checkpoint_path is not None
@@ -174,6 +185,8 @@ class InferConfig:
         self.end_effector_type = end_effector_type
         self.normalizer_stats_path = normalizer_stats_path
         self.state_drop = bool(state_drop)
+        self.smooth_action = _env_bool("WALLX_SMOOTH_ACTION", smooth_action)
+        self.smooth_gripper = _env_bool("WALLX_SMOOTH_GRIPPER", smooth_gripper)
         self.cam_names = cam_names
         self.robot_id = validate_robot_identity(
             self.robot_type, self.robot_id, self.norm_key

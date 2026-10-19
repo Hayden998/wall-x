@@ -27,6 +27,8 @@ YAML schema:
         force_render_task_indices: null   # e.g. [5] always render that task
         chunk_granular_render_toggle: false
         rebuild_env_per_episode: false
+        rollout_dir: null                 # save third-person MP4 replays per episode
+        rollout_fps: 30
     runtime:
       num_workers: 1
       max_batch_size: 1
@@ -97,6 +99,10 @@ class LiberoEnvParams:
     # Rebuild the simulator for every episode instead of only on task changes.
     # This is mainly a debugging option because it changes the simulator RNG path.
     rebuild_env_per_episode: bool = False
+    # When set, save a third-person MP4 replay for each episode under this directory.
+    # Falls back to the ``WALLX_ROLLOUT_DIR`` environment variable when null.
+    rollout_dir: Optional[str] = None
+    rollout_fps: int = 30
 
 
 @dataclass

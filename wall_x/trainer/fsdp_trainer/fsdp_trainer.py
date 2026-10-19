@@ -1,36 +1,36 @@
 """FSDP trainer implementation."""
 
-import dataclasses
+import contextlib
 import copy
+import dataclasses
 import gc
 import json
-import os
-import torch
-import time
 import logging
-import contextlib
-from torch.nn.parallel import DistributedDataParallel as DDP
-from typing import Optional, Any, Tuple
-from wall_x.config.loader import dump_config
-from wall_x.trainer.optimizer import get_optimizer
-from wall_x.utils.profile_zones import zone, Z
+import os
+import time
+from typing import Any, Optional, Tuple
 
-from wall_x.trainer.fsdp_trainer.base_trainer import (
-    DistributedTrainer,
-    is_main_process,
-    barrier,
-    get_trainer_process_group,
-)
+import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+from wall_x.config.loader import dump_config
+from wall_x.model.core.action.normalizer import create_normalizers
 from wall_x.trainer.adapters import ADAPTER_REGISTRY, format_adapter_error
 from wall_x.trainer.fsdp_trainer import checkpoint_io as _ckpt_io
 from wall_x.trainer.fsdp_trainer import checkpoint_transaction as _ckpt_transaction
 from wall_x.trainer.fsdp_trainer import portable_bundle as _portable_bundle
+from wall_x.trainer.fsdp_trainer.base_trainer import (
+    DistributedTrainer,
+    barrier,
+    get_trainer_process_group,
+    is_main_process,
+)
 from wall_x.trainer.fsdp_trainer.distribution_strategy import build_strategy
 from wall_x.trainer.metrics import MetricsLogger
-from wall_x.trainer.utils import move_batch_to_device
-
-from wall_x.model.core.action.normalizer import create_normalizers
+from wall_x.trainer.optimizer import get_optimizer
 from wall_x.trainer.scheduler.scheduler import get_scheduler
+from wall_x.trainer.utils import move_batch_to_device
+from wall_x.utils.profile_zones import Z, zone
 
 
 def _summarize_input_shapes(value, *, max_items: int = 96, max_depth: int = 4):
@@ -650,8 +650,7 @@ class FSDPTrainer(DistributedTrainer):
                 )
                 if resume_indices is not None:
                     has_data_cursor = bool(
-                        has_data_cursor
-                        or resume_indices["is_incomplete_epoch"]
+                        has_data_cursor or resume_indices["is_incomplete_epoch"]
                     )
                     extra_dataset_kwargs["resume_indices"] = resume_indices
 
@@ -853,8 +852,8 @@ class FSDPTrainer(DistributedTrainer):
                 )
                 self._accumulate_ordinary_token_observation(batch)
                 data_commit_token = self._pop_data_commit_token(batch)
-                adaptive_flow_observation = (
-                    self._pop_adaptive_flow_sample_observation(batch)
+                adaptive_flow_observation = self._pop_adaptive_flow_sample_observation(
+                    batch
                 )
                 if adaptive_flow_observation is not None:
                     adaptive_flow_enabled = True
@@ -1230,7 +1229,10 @@ class FSDPTrainer(DistributedTrainer):
                 except StopIteration:
                     batch = None
                     has_batch = 0
-                if torch.distributed.is_available() and torch.distributed.is_initialized():
+                if (
+                    torch.distributed.is_available()
+                    and torch.distributed.is_initialized()
+                ):
                     available = torch.tensor(
                         has_batch, dtype=torch.int32, device=self.device
                     )
@@ -1252,7 +1254,11 @@ class FSDPTrainer(DistributedTrainer):
         if not isinstance(batch, dict):
             raise TypeError("Packed loader must yield a dictionary batch")
         input_ids = batch.get("input_ids")
-        if not torch.is_tensor(input_ids) or input_ids.ndim != 2 or input_ids.shape[0] != 1:
+        if (
+            not torch.is_tensor(input_ids)
+            or input_ids.ndim != 2
+            or input_ids.shape[0] != 1
+        ):
             raise ValueError(
                 "Packed Wall-X expects input_ids with shape [1, S], got "
                 f"{getattr(input_ids, 'shape', None)}"
@@ -1620,13 +1626,11 @@ class FSDPTrainer(DistributedTrainer):
             flow_k = int(value)
         except (TypeError, ValueError) as exc:
             raise ValueError(
-                "_num_flow_samples_effective must be an integer, "
-                f"got {value!r}"
+                "_num_flow_samples_effective must be an integer, " f"got {value!r}"
             ) from exc
         if flow_k < 1:
             raise ValueError(
-                "_num_flow_samples_effective must be >= 1, "
-                f"got {flow_k}"
+                "_num_flow_samples_effective must be >= 1, " f"got {flow_k}"
             )
 
         action_chunk = batch.get("action_chunk")
@@ -1786,9 +1790,7 @@ class FSDPTrainer(DistributedTrainer):
         input_length_stats = getattr(self, "_current_batch_input_length_stats", None)
         if input_length_stats:
             step_stats.update(input_length_stats)
-        adaptive_flow_stats = getattr(
-            self, "_current_adaptive_flow_sample_stats", None
-        )
+        adaptive_flow_stats = getattr(self, "_current_adaptive_flow_sample_stats", None)
         if adaptive_flow_stats:
             step_stats.update(adaptive_flow_stats)
         for idx, group in enumerate(self.optimizer.param_groups):
@@ -1818,16 +1820,13 @@ class FSDPTrainer(DistributedTrainer):
             ]
             if not keys:
                 return
+
             def _local(t):
                 if hasattr(t, "full_tensor"):
                     t = t.full_tensor()
                 return t.detach().float().squeeze()
 
-            packed = (
-                torch.stack([_local(mapping[k]) for k in keys])
-                .cpu()
-                .tolist()
-            )
+            packed = torch.stack([_local(mapping[k]) for k in keys]).cpu().tolist()
             for k, v in zip(keys, packed):
                 mapping[k] = float(v)
 
@@ -2304,9 +2303,7 @@ class FSDPTrainer(DistributedTrainer):
             resume_config={
                 "ckpt": self.cfg.checkpoint.resume_from,
                 "try_harder": self.cfg.checkpoint.try_harder,
-                "resume_optimizer_state": (
-                    self.cfg.checkpoint.resume_optimizer_state
-                ),
+                "resume_optimizer_state": (self.cfg.checkpoint.resume_optimizer_state),
             },
             rank=self.rank,
             grad_scaler=self.grad_scaler,

@@ -49,7 +49,9 @@ def crop_to_box(image, box: Box):
     Keeping the size unchanged keeps the image-token count of the prompt
     unchanged. Accepts and returns a PIL image or an HWC uint8 array.
     """
-    pil = image if isinstance(image, Image.Image) else Image.fromarray(np.asarray(image))
+    pil = (
+        image if isinstance(image, Image.Image) else Image.fromarray(np.asarray(image))
+    )
     width, height = pil.size
     out = pil.crop(crop_rect(box, width, height)).resize((width, height), Image.BICUBIC)
     return out if isinstance(image, Image.Image) else np.asarray(out)

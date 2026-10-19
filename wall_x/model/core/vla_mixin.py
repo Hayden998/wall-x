@@ -5,33 +5,28 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
-
-from torch.distributed.fsdp import MixedPrecision as MP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-
-
 from peft import LoraConfig, get_peft_model
-
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import MixedPrecision as MP
 from transformers import GenerationMixin
 from transformers.utils import logging
 
-from wall_x.utils.constant import is_action_dataset_name
-
-from wall_x.model.core.action.processor import ActionProcessor
-from wall_x.model.core.action.moe import (
-    TokenTypeRouter,
-    SparseMoeBlock,
-)
 from wall_x.model.core.action.layout import TwoExpertLayout, prepare_two_expert_layout
+from wall_x.model.core.action.moe import (
+    SparseMoeBlock,
+    TokenTypeRouter,
+)
+from wall_x.model.core.action.processor import ActionProcessor
 from wall_x.model.core.ops.attention_mask import (
-    update_position_ids,
-    update_position_ids_packed,
-    update_joint_attention_mask_2d,
-    update_joint_attention_mask_2d_packed,
+    pack_block_bounds,
     update_joint_attention_flash_mask,
     update_joint_attention_flash_mask_packed,
-    pack_block_bounds,
+    update_joint_attention_mask_2d,
+    update_joint_attention_mask_2d_packed,
+    update_position_ids,
+    update_position_ids_packed,
 )
+from wall_x.utils.constant import is_action_dataset_name
 
 logger = logging.get_logger(__name__)
 
@@ -434,7 +429,9 @@ class ActionModelMixMin:
         self, attention_mask, moe_token_types, positional_masks, pack_seq_lens=None
     ):
         if pack_seq_lens is not None:
-            reference = moe_token_types if moe_token_types is not None else attention_mask
+            reference = (
+                moe_token_types if moe_token_types is not None else attention_mask
+            )
             starts, ends = pack_block_bounds(
                 pack_seq_lens, reference.shape[1], reference.device
             )
@@ -495,9 +492,10 @@ class ActionGenerationMixin(GenerationMixin):
 
     def should_compute_ar_loss(self, labels) -> bool:
         """Return whether this batch should materialize AR logits and CE loss."""
-        return labels is not None and float(
-            getattr(self.config, "ar_loss_weight", 1.0)
-        ) != 0.0
+        return (
+            labels is not None
+            and float(getattr(self.config, "ar_loss_weight", 1.0)) != 0.0
+        )
 
     def to_bfloat16_for_selected_params(self, fsdp_plugin=None, accelerator=None):
         """
@@ -546,11 +544,11 @@ class ActionGenerationMixin(GenerationMixin):
                 cast_root_forward_inputs=False,
             )
 
-            from wall_x.model.qact.qwen2_5.modeling_qwen2_5_vl_act import (
-                Qwen2_5_VLDecoderLayer_with_MoE,
-            )
             from wall_x.model.qact.qwen2_5.modeling_qwen2_5_vl import (
                 Qwen2_5_VLVisionBlock,
+            )
+            from wall_x.model.qact.qwen2_5.modeling_qwen2_5_vl_act import (
+                Qwen2_5_VLDecoderLayer_with_MoE,
             )
 
             target_classes = (
@@ -780,8 +778,12 @@ class ActionGenerationMixin(GenerationMixin):
                             action_sample_mask[loss_batch_idx],
                             ar_action_loss_weight,
                             1.0,
-                        ).to(device=shift_logits.device, dtype=_cross_entropy_loss.dtype)
-                        cross_entropy_loss = (_cross_entropy_loss * token_weights).mean()
+                        ).to(
+                            device=shift_logits.device, dtype=_cross_entropy_loss.dtype
+                        )
+                        cross_entropy_loss = (
+                            _cross_entropy_loss * token_weights
+                        ).mean()
 
                     # compute channel loss
                     if unique_datasets_name is not None:
@@ -820,9 +822,11 @@ class ActionGenerationMixin(GenerationMixin):
                             device=shift_logits.device,
                             dtype=torch.bool,
                         )
-                        token_is_action = action_sample_mask.unsqueeze(1).expand(
-                            batch_size, seq_length - 1
-                        ).reshape(-1)[non_ignored_mask]
+                        token_is_action = (
+                            action_sample_mask.unsqueeze(1)
+                            .expand(batch_size, seq_length - 1)
+                            .reshape(-1)[non_ignored_mask]
+                        )
                         token_weights = torch.where(
                             token_is_action,
                             ar_action_loss_weight,

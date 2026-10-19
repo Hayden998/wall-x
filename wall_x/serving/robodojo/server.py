@@ -436,6 +436,7 @@ class PolicyServer:
                         result = await result
                     get_action_ms = (time.perf_counter() - action_start) * 1000.0
                 else:
+
                     def run_batch_infer() -> tuple[Any, float, float]:
                         update_start = time.perf_counter()
                         upd = update_obs_batch(observations)
@@ -466,7 +467,9 @@ class PolicyServer:
             try:
                 action_count = len(result)
             except (TypeError, AttributeError) as exc:
-                raise TypeError("get_action_batch must return a batch sequence") from exc
+                raise TypeError(
+                    "get_action_batch must return a batch sequence"
+                ) from exc
             if action_count != batch_size:
                 raise ValueError(
                     "batch inference result length mismatch: "
@@ -535,6 +538,7 @@ class PolicyServer:
                         if inspect.isawaitable(result):
                             result = await result
                     else:
+
                         def run_legacy_infer() -> Any:
                             update_result = update_obs(observation)
                             if inspect.isawaitable(update_result):
@@ -567,7 +571,9 @@ class PolicyServer:
             payload.setdefault("latency_ms", latency_ms)
             payload.setdefault("actions_batch", [payload["actions"]])
             payload.setdefault("timings_ms", {"server_infer_total": latency_ms})
-            payload.setdefault("batch_profile", {"batch_size": 1, "session_capacity": 1})
+            payload.setdefault(
+                "batch_profile", {"batch_size": 1, "session_capacity": 1}
+            )
         else:
             payload = {"actions": result, "latency_ms": latency_ms}
 

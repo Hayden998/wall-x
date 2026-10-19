@@ -31,9 +31,7 @@ def prepare_two_expert_layout_packed(
     is_action = flat == 1
     action_pos = is_action.nonzero(as_tuple=True)[0]
     llm_pos = (~is_action).nonzero(as_tuple=True)[0]
-    token_perm = torch.cat((llm_pos, action_pos)).to(
-        device=device, dtype=torch.int64
-    )
+    token_perm = torch.cat((llm_pos, action_pos)).to(device=device, dtype=torch.int64)
     token_perm_inv = torch.empty_like(token_perm)
     token_perm_inv[token_perm] = torch.arange(
         token_perm.numel(), device=device, dtype=torch.int64

@@ -111,7 +111,9 @@ class KeyframeMemoryModelWrapper(WallxModelWrapper):
                 boxes=dict(state.boxes) if boxes else {},
                 frame_stamp=memory.frame_stamp,
             )
-        output = self.infer_flow_action({**observation, MEMORY_KEY: memory}, instruction)
+        output = self.infer_flow_action(
+            {**observation, MEMORY_KEY: memory}, instruction
+        )
         return output, report
 
     # ------------------------------------------------------------------
@@ -127,7 +129,9 @@ class KeyframeMemoryModelWrapper(WallxModelWrapper):
     ) -> Selection:
         cfg = self.memory_config
         tokens = self.selection_tokens
-        prompt = selection_prompt(instruction, len(window.memory), len(window.candidates))
+        prompt = selection_prompt(
+            instruction, len(window.memory), len(window.candidates)
+        )
         images = [
             self._memory_image(f.image, state.boxes.get(f.index) if boxes else None)
             for f in window.memory
@@ -185,7 +189,8 @@ class KeyframeMemoryModelWrapper(WallxModelWrapper):
         if memory is None or not self.memory_config.memory_in_prompt:
             return cameras
         extra: List[Any] = [
-            self._memory_image(f.image, memory.boxes.get(f.index)) for f in memory.frames
+            self._memory_image(f.image, memory.boxes.get(f.index))
+            for f in memory.frames
         ]
         extra += [self._head_image(f.image) for f in memory.short_term]
         return extra + cameras

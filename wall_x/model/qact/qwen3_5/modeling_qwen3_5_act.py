@@ -1,75 +1,70 @@
+from dataclasses import dataclass
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
 from torch.nn import CrossEntropyLoss
-from dataclasses import dataclass
-from typing import Optional
-
-
-from . import initialization as init
+from transformers.cache_utils import Cache
+from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     ModelOutput,
 )
-from transformers.cache_utils import Cache
 from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs
-from transformers.modeling_layers import GradientCheckpointingLayer
 
-from wall_x.model.qact.qwen3_5.configuration_qwen3_5 import (
-    Qwen3_5TextConfig,
-    Qwen3_5Config,
-)
-from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5RMSNorm,
-    Qwen3_5AdaptiveRMSNorm,
-)
-from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import Qwen3_5TextRotaryEmbedding
-from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5VisionModel,
-    Qwen3_5TextModel,
-    Qwen3_5VisionBlock,
-    Qwen3_5VisionPatchEmbed,
-    Qwen3_5VisionPatchMerger,
-    create_causal_mask,
-    Qwen3_5DynamicCache,
-)
-from wall_x.model.qact.qwen3_5.qwen3_5_vla_vision import (
-    Qwen3_5VLAVisionConfig,
-    Qwen3_5VLAVisionModel,
-    Qwen3_5VLAVisionBlock,
-)
-from wall_x.model.qact.qwen3_5.dino_vision import Qwen3_5DinoVisionModel
-from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5Model,
-    Qwen3_5MLP,
-    Qwen3_5MLP_VLA,
-    Qwen3_5ForConditionalGeneration,
-)
-from wall_x.model.qact.qwen3_5.qwen3_5_vla_attention import (
-    Qwen3_5_VLA_Attention,
-    Qwen3_5_VLA_GatedDeltaNet,
-    _flash_mask_ki_prefix_lens,
-)
-from wall_x.model.core.vla_mixin import (
-    ActionModelMixMin,
-    ActionGenerationMixin,
-)
-from wall_x.model.core.attention.selector import (
-    ATTENTION_TYPES_WITH_2D_MASK,
-    ATTENTION_TYPES_WITH_FLASH_MASK,
-)
 from wall_x.model.core.action.layout import (
     TwoExpertLayout,
     prepare_two_expert_layout,
     prepare_two_expert_layout_packed,
 )
-from wall_x.model.core.ops.packed_position_ids import packed_position_ids
 from wall_x.model.core.action.processor import ActionProcessor
+from wall_x.model.core.attention.selector import (
+    ATTENTION_TYPES_WITH_2D_MASK,
+    ATTENTION_TYPES_WITH_FLASH_MASK,
+)
+from wall_x.model.core.ops.packed_position_ids import packed_position_ids
 from wall_x.model.core.refiner import RefinerConfig, install_twins
+from wall_x.model.core.vla_mixin import (
+    ActionGenerationMixin,
+    ActionModelMixMin,
+)
+from wall_x.model.qact.qwen3_5.configuration_qwen3_5 import (
+    Qwen3_5Config,
+    Qwen3_5TextConfig,
+)
+from wall_x.model.qact.qwen3_5.dino_vision import Qwen3_5DinoVisionModel
+from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
+    Qwen3_5AdaptiveRMSNorm,
+    Qwen3_5DynamicCache,
+    Qwen3_5ForConditionalGeneration,
+    Qwen3_5MLP,
+    Qwen3_5MLP_VLA,
+    Qwen3_5Model,
+    Qwen3_5RMSNorm,
+    Qwen3_5TextModel,
+    Qwen3_5TextRotaryEmbedding,
+    Qwen3_5VisionBlock,
+    Qwen3_5VisionModel,
+    Qwen3_5VisionPatchEmbed,
+    Qwen3_5VisionPatchMerger,
+    create_causal_mask,
+)
 from wall_x.model.qact.qwen3_5.qwen3_5_inference_mixin import Qwen3_5VLAInferenceMixin
+from wall_x.model.qact.qwen3_5.qwen3_5_vla_attention import (
+    Qwen3_5_VLA_Attention,
+    Qwen3_5_VLA_GatedDeltaNet,
+    _flash_mask_ki_prefix_lens,
+)
+from wall_x.model.qact.qwen3_5.qwen3_5_vla_vision import (
+    Qwen3_5VLAVisionBlock,
+    Qwen3_5VLAVisionConfig,
+    Qwen3_5VLAVisionModel,
+)
 
+from . import initialization as init
 
 _QWEN35_DMUON_BLOCKED_NAME_PARTS = (
     "embed_tokens",
@@ -554,15 +549,16 @@ class Qwen3_5_VLATextModel(Qwen3_5TextModel, ActionModelMixMin):
                     "Qwen3.5 packing currently requires one packed row per batch"
                 )
             if use_cache or past_key_values is not None:
-                raise RuntimeError("Qwen3.5 packing is training-only and has no cache support")
+                raise RuntimeError(
+                    "Qwen3.5 packing is training-only and has no cache support"
+                )
             if position_ids_were_none or position_ids.ndim != 3:
                 raise RuntimeError(
                     "Packed Qwen3.5 requires Wall-X-built 3-D mRoPE position_ids"
                 )
             if (
                 "full_attention" in self.config.layer_types
-                and self.config._attn_implementation
-                not in ATTENTION_TYPES_WITH_2D_MASK
+                and self.config._attn_implementation not in ATTENTION_TYPES_WITH_2D_MASK
                 and self.config._attn_implementation
                 not in ATTENTION_TYPES_WITH_FLASH_MASK
             ):
@@ -864,7 +860,9 @@ class Qwen3_5_VLAModel(Qwen3_5Model, ActionModelMixMin):
                 "Qwen3.5 packing requires input_ids; precomputed inputs_embeds "
                 "cannot be extended safely for packed DP synchronization"
             )
-        if packing_active and (past_key_values is not None or cache_position is not None):
+        if packing_active and (
+            past_key_values is not None or cache_position is not None
+        ):
             raise RuntimeError("Qwen3.5 sequence packing does not support cache")
         if packing_active and input_ids.shape[0] != 1:
             raise NotImplementedError("Qwen3.5 packing requires batch size 1")
@@ -1005,9 +1003,7 @@ class Qwen3_5_VLAModel(Qwen3_5Model, ActionModelMixMin):
                     processor_sample_time = torch.cat(
                         (
                             processor_sample_time,
-                            processor_sample_time.new_zeros(
-                                (1, dummy_action_horizon)
-                            ),
+                            processor_sample_time.new_zeros((1, dummy_action_horizon)),
                         ),
                         dim=0,
                     )
@@ -1136,7 +1132,10 @@ class Qwen3_5_VLAModel(Qwen3_5Model, ActionModelMixMin):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        if packing_dp_dummy and not self.config.vla_config.use_state_string_representation:
+        if (
+            packing_dp_dummy
+            and not self.config.vla_config.use_state_string_representation
+        ):
             proprio_dim = int(self.action_processor.propri_dim)
             dummy_proprio = inputs_embeds.new_zeros(
                 (1, 1, proprio_dim), dtype=torch.float32
@@ -1641,10 +1640,11 @@ class Qwen3_5_VLAForConditionalGeneration(
         ``distributed.fsdp.sharding_strategy``, so active runs wanting that
         throughput should set it to ``shard_grad_op`` explicitly.
         """
-        from torch.distributed.fsdp import fully_shard, MixedPrecisionPolicy
+        from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
 
         if use_dmuon:
             import dmuon
+
             from wall_x.trainer.optimizer.dmuon.utils import dmuon_dedicate_mesh_args
 
             # DMuon keeps fp32 master weights for dedicated params; symmetric
@@ -1776,6 +1776,7 @@ class Qwen3_5_VLAForConditionalGeneration(
     ):
         """Install pure DMuon ownership without calling FSDP2 ``fully_shard``."""
         import dmuon
+
         from wall_x.trainer.optimizer.dmuon.policy import (
             make_wallx_action_fp32_dmuon_param_policy_fn,
             summarize_dmuon_param_policy,

@@ -9,7 +9,6 @@ import torch
 
 from wall_x.model.core.ops.seq_rvq import qwen35_rvq_position_ids
 
-
 RVQ_POSITION_ENCODINGS = frozenset({"text_1d", "time_level_2d"})
 RVQ_TOKEN_LAYOUTS = frozenset({"time_major", "layer_major"})
 

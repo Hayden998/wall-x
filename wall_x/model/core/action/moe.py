@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
 from transformers.activations import ACT2FN
 
 from wall_x.model.core.action.layout import (
@@ -11,7 +10,6 @@ from wall_x.model.core.action.layout import (
     resolve_two_expert_action_ranges,
 )
 from wall_x.model.core.ops import silu_and_mul, two_expert_pack, two_expert_unpack
-
 
 __all__ = [
     "TwoExpertLayout",

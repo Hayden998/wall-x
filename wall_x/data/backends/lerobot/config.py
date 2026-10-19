@@ -1,5 +1,6 @@
-from typing import Any, Dict, Optional
 from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
 try:
     from qwen_vl_utils.vision_process import IMAGE_FACTOR, MAX_PIXELS, MIN_PIXELS
 except ImportError:  # qwen_vl_utils >= 0.0.12 dropped the Qwen2.5-VL defaults.

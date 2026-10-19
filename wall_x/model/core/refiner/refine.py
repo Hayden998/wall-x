@@ -47,7 +47,9 @@ class RefinerConfig:
             return cls()
         if isinstance(raw, RefinerConfig):
             return raw
-        get = raw.get if isinstance(raw, dict) else (lambda k, d=None: getattr(raw, k, d))
+        get = (
+            raw.get if isinstance(raw, dict) else (lambda k, d=None: getattr(raw, k, d))
+        )
         cfg = cls(
             enabled=bool(get("enabled", False)),
             num_steps=None if get("num_steps") is None else int(get("num_steps")),

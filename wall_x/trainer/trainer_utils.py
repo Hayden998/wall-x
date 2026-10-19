@@ -16,7 +16,7 @@ from transformers import AutoProcessor
 
 from wall_x.model.core.action.normalizer import Normalizer
 from wall_x.model.qact.tokenizer_mixin import get_action_tokenizer_mixin
-from wall_x.utils.metrics import get_action_accuracy, dtw_distance, frechet_distance
+from wall_x.utils.metrics import dtw_distance, frechet_distance, get_action_accuracy
 
 _logger = logging.getLogger(__name__)
 

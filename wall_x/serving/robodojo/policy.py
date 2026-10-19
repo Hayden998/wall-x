@@ -67,16 +67,36 @@ def matrix_to_quat_wxyz(m: np.ndarray) -> np.ndarray:
     trace = m[0, 0] + m[1, 1] + m[2, 2]
     if trace > 0.0:
         s = np.sqrt(trace + 1.0) * 2.0
-        q = [0.25 * s, (m[2, 1] - m[1, 2]) / s, (m[0, 2] - m[2, 0]) / s, (m[1, 0] - m[0, 1]) / s]
+        q = [
+            0.25 * s,
+            (m[2, 1] - m[1, 2]) / s,
+            (m[0, 2] - m[2, 0]) / s,
+            (m[1, 0] - m[0, 1]) / s,
+        ]
     elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
         s = np.sqrt(max(1.0 + m[0, 0] - m[1, 1] - m[2, 2], 1e-12)) * 2.0
-        q = [(m[2, 1] - m[1, 2]) / s, 0.25 * s, (m[0, 1] + m[1, 0]) / s, (m[0, 2] + m[2, 0]) / s]
+        q = [
+            (m[2, 1] - m[1, 2]) / s,
+            0.25 * s,
+            (m[0, 1] + m[1, 0]) / s,
+            (m[0, 2] + m[2, 0]) / s,
+        ]
     elif m[1, 1] > m[2, 2]:
         s = np.sqrt(max(1.0 + m[1, 1] - m[0, 0] - m[2, 2], 1e-12)) * 2.0
-        q = [(m[0, 2] - m[2, 0]) / s, (m[0, 1] + m[1, 0]) / s, 0.25 * s, (m[1, 2] + m[2, 1]) / s]
+        q = [
+            (m[0, 2] - m[2, 0]) / s,
+            (m[0, 1] + m[1, 0]) / s,
+            0.25 * s,
+            (m[1, 2] + m[2, 1]) / s,
+        ]
     else:
         s = np.sqrt(max(1.0 + m[2, 2] - m[0, 0] - m[1, 1], 1e-12)) * 2.0
-        q = [(m[1, 0] - m[0, 1]) / s, (m[0, 2] + m[2, 0]) / s, (m[1, 2] + m[2, 1]) / s, 0.25 * s]
+        q = [
+            (m[1, 0] - m[0, 1]) / s,
+            (m[0, 2] + m[2, 0]) / s,
+            (m[1, 2] + m[2, 1]) / s,
+            0.25 * s,
+        ]
     q = np.asarray(q, dtype=np.float64)
     return q / np.linalg.norm(q)
 
@@ -119,7 +139,9 @@ def observation_arms(obs: Mapping[str, Any]) -> dict[str, tuple[np.ndarray, floa
     for side in SIDES:
         try:
             pose = np.asarray(state[f"{side}_ee_pose"], dtype=np.float64).reshape(-1)
-            grip = np.asarray(state[f"{side}_ee_joint_state"], dtype=np.float64).reshape(-1)
+            grip = np.asarray(
+                state[f"{side}_ee_joint_state"], dtype=np.float64
+            ).reshape(-1)
         except (KeyError, TypeError, ValueError) as exc:
             _invalid(f"invalid {side} end-effector state: {exc}")
         if pose.shape != (7,) or not np.isfinite(pose).all():
@@ -272,7 +294,9 @@ class WallXRoboDojoPolicy:
         from wall_x._vendor.x2robot_utils import geometry
 
         values = data.data
-        state_pos = np.asarray(values[f"state_{side}_ee_cartesian_pos"], dtype=np.float64)
+        state_pos = np.asarray(
+            values[f"state_{side}_ee_cartesian_pos"], dtype=np.float64
+        )
         state_rot = np.asarray(values[f"state_{side}_ee_rotation_6D"], dtype=np.float64)
         rel_pos = dict.get(values, f"action_{side}_ee_cartesian_pos_relative")
         rel_rot = dict.get(values, f"action_{side}_ee_rotation_6D_relative")
@@ -280,7 +304,9 @@ class WallXRoboDojoPolicy:
             rel_pos = np.asarray(rel_pos, dtype=np.float64).reshape(-1, 3)
             rel_rot = np.asarray(rel_rot, dtype=np.float64).reshape(-1, 6)
             if self.relative_action_frame == "body":
-                pos = body_frame.compose_body_delta_to_abs_pos(rel_pos, state_pos, state_rot)
+                pos = body_frame.compose_body_delta_to_abs_pos(
+                    rel_pos, state_pos, state_rot
+                )
                 rot = body_frame.compose_body_delta_to_abs_6d(rel_rot, state_rot)
             else:
                 pos = rel_pos + state_pos.reshape(1, 3)
@@ -311,10 +337,7 @@ class WallXRoboDojoPolicy:
                 raise ValueError(f"non-finite {side} action")
             per_side[side] = (pose.astype(np.float32), grip.astype(np.float32))
         return [
-            {
-                f"{side}_ee_pose": per_side[side][0][t]
-                for side in SIDES
-            }
+            {f"{side}_ee_pose": per_side[side][0][t] for side in SIDES}
             | {f"{side}_ee_joint_state": per_side[side][1][t] for side in SIDES}
             for t in range(len(per_side["left"][0]))
         ]

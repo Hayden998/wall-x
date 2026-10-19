@@ -25,30 +25,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as cp
-
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.utils import logging
 from transformers.utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
 from transformers.utils.output_capturing import capture_outputs
-from transformers.utils import logging
 
 from wall_x.model.core.ops import (
     pos_embed_interp as pos_embed_interp_op,
+)
+from wall_x.model.core.ops import (
     rope as rope_op,
+)
+from wall_x.model.core.ops import (
     rot_pos_emb as rot_pos_emb_op,
 )
 from wall_x.model.qact.qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from wall_x.model.qact.qwen3_5.modeling_qwen3_5 import (
+    Qwen3_5PreTrainedModel,
+    Qwen3_5VisionAttention,
+    Qwen3_5VisionMLP,
     Qwen3_5VisionPatchEmbed,
     Qwen3_5VisionPatchMerger,
     Qwen3_5VisionRotaryEmbedding,
-    Qwen3_5VisionAttention,
-    Qwen3_5VisionMLP,
-    Qwen3_5PreTrainedModel,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )

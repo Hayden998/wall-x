@@ -71,7 +71,9 @@ def _frames(entries: Any, what: str):
     for item in entries:
         if not isinstance(item, Mapping):
             _invalid(f"{what} entries must be mappings")
-        frames.append(Frame(_frame_id(item.get("sim_frame")), _image(item.get("face_view"))))
+        frames.append(
+            Frame(_frame_id(item.get("sim_frame")), _image(item.get("face_view")))
+        )
     return frames
 
 
@@ -123,7 +125,9 @@ def parse_request(
     ring = _frames(ring_raw, "ring")
     expected = list(range(max(0, now - config.ring_span), now + 1))
     if [f.index for f in ring] != expected:
-        _invalid(f"ring must contain every raw frame from max(0,now-{config.ring_span}) through now")
+        _invalid(
+            f"ring must contain every raw frame from max(0,now-{config.ring_span}) through now"
+        )
 
     mem_raw = raw.get("mem")
     if not isinstance(mem_raw, list) or len(mem_raw) > config.capacity:
@@ -161,15 +165,21 @@ def parse_request(
 
 def _check_history(history: Any, now: int, previous: Optional[int], max_advance: int):
     if not isinstance(history, list) or len(history) > MAX_ADVANCE:
-        _invalid(f"{HISTORY_KEY} must be a list of at most {MAX_ADVANCE} execution frames")
+        _invalid(
+            f"{HISTORY_KEY} must be a list of at most {MAX_ADVANCE} execution frames"
+        )
     frames = [f.index for f in _frames(history, "history")]
     if previous is None:
         if now > MAX_ADVANCE:
-            _invalid(f"first observation must start within the first {MAX_ADVANCE} steps")
+            _invalid(
+                f"first observation must start within the first {MAX_ADVANCE} steps"
+            )
         expected = list(range(1, now + 1))
     else:
         if now - previous > max_advance:
-            _invalid("sim_frame must advance by the executed chunk length; reset between episodes")
+            _invalid(
+                "sim_frame must advance by the executed chunk length; reset between episodes"
+            )
         expected = list(range(previous + 1, now + 1))
     if frames != expected:
         _invalid(
@@ -185,8 +195,14 @@ def _parse_boxes(raw: Any, memory_frames: list) -> Optional[Dict[int, Box]]:
     if isinstance(raw, dict):
         items = []
         for key, box in raw.items():
-            if not isinstance(key, str) or not key.isdecimal() or int(key) not in memory_frames:
-                _invalid("mem_boxes keys must be decimal frame ids of retained memory frames")
+            if (
+                not isinstance(key, str)
+                or not key.isdecimal()
+                or int(key) not in memory_frames
+            ):
+                _invalid(
+                    "mem_boxes keys must be decimal frame ids of retained memory frames"
+                )
             items.append((int(key), box))
     elif isinstance(raw, list) and len(raw) == len(memory_frames):
         items = list(zip(memory_frames, raw))
@@ -199,7 +215,9 @@ def _parse_boxes(raw: Any, memory_frames: list) -> Optional[Dict[int, Box]]:
         if (
             not isinstance(box, (list, tuple))
             or len(box) != 4
-            or any(isinstance(v, bool) or not isinstance(v, (int, np.integer)) for v in box)
+            or any(
+                isinstance(v, bool) or not isinstance(v, (int, np.integer)) for v in box
+            )
             or not (0 <= box[0] < box[2] <= 1000 and 0 <= box[1] < box[3] <= 1000)
         ):
             _invalid(

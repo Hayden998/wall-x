@@ -909,7 +909,10 @@ async def run_openloop_eval(
                 pred_chunk = extract_action_chunk_from_response(result, train_config)
                 if pred_chunk.ndim == 1:
                     pred_chunk = pred_chunk[np.newaxis, :]
-                if pred_chunk.shape[1] != gt_full.shape[1] and pred_chunk.shape[1] == 14:
+                if (
+                    pred_chunk.shape[1] != gt_full.shape[1]
+                    and pred_chunk.shape[1] == 14
+                ):
                     converted = actions_to_follow_pos_14d(gt_full, dof_cfg)
                     if converted is not None:
                         logger.info(

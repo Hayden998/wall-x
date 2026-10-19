@@ -1,26 +1,22 @@
-import torch
-import torch.nn as nn
 from typing import Optional, Tuple
 
+import torch
+import torch.nn as nn
+from flash_attn import flash_attn_func
+from transformers.cache_utils import Cache
+from transformers.modeling_flash_attention_utils import (
+    is_flash_attn_greater_or_equal_2_10,
+)
+from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLRotaryEmbedding,
     repeat_kv,
 )
-
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
-from transformers.cache_utils import Cache
 from transformers.utils import logging
 
-from wall_x.model.core.ops.attention_mask import find_first_last_ones
 from wall_x.model.core.action.layout import TwoExpertLayout, prepare_two_expert_layout
-
 from wall_x.model.core.ops import m_rope, two_expert_pack, two_expert_unpack
-
-from flash_attn import flash_attn_func
-
-from transformers.modeling_flash_attention_utils import (
-    is_flash_attn_greater_or_equal_2_10,
-)
+from wall_x.model.core.ops.attention_mask import find_first_last_ones
 
 try:
     from flash_mask.flash_mask_interface import flash_mask_attn_func

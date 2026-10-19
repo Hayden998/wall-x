@@ -109,7 +109,9 @@ class KeyframeBank:
         written = []
         for slot in sorted(s for s in selection.slots if s in window.writable):
             frame = window.candidates[slot]
-            if any(abs(frame.index - m.index) <= cfg.dedup_radius for m in state.memory):
+            if any(
+                abs(frame.index - m.index) <= cfg.dedup_radius for m in state.memory
+            ):
                 continue
             state.memory.append(frame)
             if slot in selection.boxes:

@@ -71,7 +71,9 @@ class KeyframeMemoryConfig:
         return task_id.removesuffix("_random")
 
     def uses_memory(self, task_id: str) -> bool:
-        return self.memory_tasks is None or self.task_family(task_id) in self.memory_tasks
+        return (
+            self.memory_tasks is None or self.task_family(task_id) in self.memory_tasks
+        )
 
     def uses_boxes(self, task_id: str) -> bool:
         return self.box_crop and self.task_family(task_id) in self.box_tasks

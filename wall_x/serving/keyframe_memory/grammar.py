@@ -27,7 +27,25 @@ _MAX_DIGITS = 4
 # Training-format box text and its expected tokenization; checked against the
 # checkpoint tokenizer so the grammar matches the trained answer format.
 _BOX_SAMPLE = " (212,405),(378,592)"
-_BOX_PIECES = [" (", "2", "1", "2", ",", "4", "0", "5", "),(", "3", "7", "8", ",", "5", "9", "2", ")"]
+_BOX_PIECES = [
+    " (",
+    "2",
+    "1",
+    "2",
+    ",",
+    "4",
+    "0",
+    "5",
+    "),(",
+    "3",
+    "7",
+    "8",
+    ",",
+    "5",
+    "9",
+    "2",
+    ")",
+]
 
 
 @dataclass(frozen=True)
@@ -67,8 +85,12 @@ class SelectionTokens:
             return cls(slots=slots, **ids)
         sample = tokenizer(_BOX_SAMPLE, add_special_tokens=False)["input_ids"]
         digits = tuple(tokenizer.convert_tokens_to_ids(str(d)) for d in range(10))
-        if [tokenizer.decode([t]) for t in sample] != _BOX_PIECES or len(set(digits)) != 10:
-            raise ValueError("unexpected box tokenization; the box grammar would not match training")
+        if [tokenizer.decode([t]) for t in sample] != _BOX_PIECES or len(
+            set(digits)
+        ) != 10:
+            raise ValueError(
+                "unexpected box tokenization; the box grammar would not match training"
+            )
         return cls(
             slots=slots,
             box_open=sample[0],
@@ -111,7 +133,12 @@ def _walk(tokens: SelectionTokens, generated: Sequence[int]) -> _Cursor:
                 cursor.num_digits += 1
             continue
         if tok == tokens.box_open and cursor.after_slot:
-            cursor.box_seps = [tokens.comma, tokens.middle, tokens.comma, tokens.box_close]
+            cursor.box_seps = [
+                tokens.comma,
+                tokens.middle,
+                tokens.comma,
+                tokens.box_close,
+            ]
             cursor.num_digits = 0
             cursor.after_slot = False
         elif tok in tokens.slots:
@@ -123,7 +150,9 @@ def _walk(tokens: SelectionTokens, generated: Sequence[int]) -> _Cursor:
 class SelectionGrammar:
     """``LogitsProcessor`` restricting greedy decoding to valid answers."""
 
-    def __init__(self, tokens: SelectionTokens, prompt_length: int, max_writes: int, boxes: bool):
+    def __init__(
+        self, tokens: SelectionTokens, prompt_length: int, max_writes: int, boxes: bool
+    ):
         self.tokens = tokens
         self.prompt_length = prompt_length
         self.max_writes = max_writes
@@ -154,7 +183,9 @@ class SelectionGrammar:
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
         masked = torch.full_like(scores, float("-inf"))
         for row in range(input_ids.shape[0]):
-            allowed, merged = self.allowed(input_ids[row, self.prompt_length :].tolist())
+            allowed, merged = self.allowed(
+                input_ids[row, self.prompt_length :].tolist()
+            )
             masked[row, allowed] = scores[row, allowed]
             if merged:
                 end = self.tokens.end
@@ -162,7 +193,9 @@ class SelectionGrammar:
         return masked
 
 
-def parse_selection(tokens: SelectionTokens, generated: Sequence[int], margin: float) -> Selection:
+def parse_selection(
+    tokens: SelectionTokens, generated: Sequence[int], margin: float
+) -> Selection:
     if not generated or generated[0] != tokens.write:
         return Selection(write=False, margin=margin)
     slots: List[int] = []

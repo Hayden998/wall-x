@@ -13,7 +13,6 @@ import os
 import uuid
 from pathlib import Path
 
-
 COMPLETION_MARKER = "_SUCCESS"
 TRAINER_STATE_FILE = "trainer_state.pth"
 TRANSACTION_FORMAT_VERSION = 1
@@ -44,9 +43,7 @@ def publish(staging_path: str, final_path: str) -> None:
 
     marker = staging / COMPLETION_MARKER
     with marker.open("w", encoding="utf-8") as stream:
-        json.dump(
-            {"transaction_format_version": TRANSACTION_FORMAT_VERSION}, stream
-        )
+        json.dump({"transaction_format_version": TRANSACTION_FORMAT_VERSION}, stream)
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())

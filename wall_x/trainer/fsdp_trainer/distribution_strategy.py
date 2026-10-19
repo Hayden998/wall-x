@@ -425,8 +425,8 @@ class DMuonStrategy(DistributionStrategy):
         # the per-step code never probes. None -> manual fallback path.
         self._buckets_clip_fn = None
         try:
-            from dmuon.fast_clip import _load_fast_clip_extension
             from dmuon import try_clip_optimizer_grad_norm_buckets_
+            from dmuon.fast_clip import _load_fast_clip_extension
 
             if _load_fast_clip_extension() is not None:
                 self._buckets_clip_fn = try_clip_optimizer_grad_norm_buckets_

@@ -1,8 +1,8 @@
 import logging
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
-from typing import Optional, List, Tuple
 from torchdiffeq import odeint
 
 logger = logging.getLogger(__name__)

@@ -34,7 +34,9 @@ class WsModelClient:
             PolicyEvalClientConfig(url=url, evaluation_id=evaluation_id)
         )
         hello = self._loop.run_until_complete(self._client.connect(handshake=True))
-        capabilities = hello.payload.get("capabilities", []) if hello is not None else []
+        capabilities = (
+            hello.payload.get("capabilities", []) if hello is not None else []
+        )
         self.supports_batch_infer = "batch_infer" in capabilities
 
     def call(self, func_name: str | None = None, obs: Any = None, **kwargs: Any) -> Any:
@@ -87,7 +89,9 @@ class WsModelClient:
 
         if func_name == "update_obs_batch":
             if not self.supports_batch_infer:
-                raise RuntimeError("websocket policy server does not support batch_infer")
+                raise RuntimeError(
+                    "websocket policy server does not support batch_infer"
+                )
             self._latest_obs_batch = list(obs) if obs is not None else []
             env_ids = kwargs.get("env_ids")
             self._latest_env_ids = list(env_ids) if env_ids is not None else None
@@ -95,7 +99,9 @@ class WsModelClient:
 
         if func_name == "get_action_batch":
             if not self.supports_batch_infer:
-                raise RuntimeError("websocket policy server does not support batch_infer")
+                raise RuntimeError(
+                    "websocket policy server does not support batch_infer"
+                )
             observations = self._latest_obs_batch
             if observations is None:
                 raise ValueError(
