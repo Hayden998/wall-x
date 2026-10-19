@@ -12,7 +12,7 @@ import dataclasses
 import logging
 import os
 
-from wall_x._vendor.harrix.utils.dataset_v2 import (
+from wall_x._vendor.harrix.utils.processor_config import (
     build_inference_data_config,
     merge_private_data_config,
     normalize_dataset_config_for_inference,
@@ -91,15 +91,9 @@ def build_model_config(config_class, checkpoint_path: str, cfg, train_config: di
 def build_data_config(cfg, train_config: dict):
     """Build the data config used by image resizing and preprocessing.
 
-    x2robot_v2 / lerobot: ``load_x2r_data_config`` returns None for these
-    backends, so project the checkpoint-embedded effective processor contract.
-    This is shared with the serving stack and does not depend on the removed
-    ``x2robot_utils.vision_params`` shim.
+    Projects the checkpoint-embedded effective processor config when present;
+    otherwise the flat ``data`` section supplies the defaults.
     """
-    if cfg.data.dataset_type in ("x2robot_v2", "lerobot"):
-        processors, source = normalize_dataset_config_for_inference(train_config)
-        return build_inference_data_config(train_config, processors, source)
-
-    from wall_x.trainer.adapters.base_adapter import load_trainer_data_config
-
-    return load_x2r_data_config(cfg)
+    del cfg
+    processors, source = normalize_dataset_config_for_inference(train_config)
+    return build_inference_data_config(train_config, processors, source)

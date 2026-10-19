@@ -192,9 +192,8 @@ class Normalizer(nn.Module):
         """Build a Normalizer directly from precomputed per-dataset min/delta.
 
         ``min_by_key`` / ``delta_by_key`` are ``{dataset_name: 1-D array/tensor}``
-        with matching keys. Used by :func:`create_normalizers_from_v2_stats` so
-        the model-side normalizer carries the exact statistics the
-        internal_dataset_backend_v2 pipeline used.
+        with matching keys, so the model-side normalizer carries the exact
+        statistics the training data pipeline used.
         """
         instance = cls.__new__(cls)
         nn.Module.__init__(instance)
@@ -440,8 +439,6 @@ def create_normalizers(config, action_statistic_dof=None):
 
 
 NORM_KEY_SEP = "/"
-V2_DEFAULT_MIN_KEY = "q001"
-V2_DEFAULT_DELTA_KEY = "delta_001"
 
 
 def make_norm_key(dataset_type, end_effector_type=None):
@@ -449,79 +446,11 @@ def make_norm_key(dataset_type, end_effector_type=None):
     end_effector_type)`` pair.
 
     Returns the bare ``dataset_type`` when there is no end_effector_type
-    (flat/legacy stats, e.g. lerobot / x2robot_v1).
+    (flat/legacy stats, e.g. lerobot).
     """
     if end_effector_type is None or end_effector_type == "":
         return dataset_type
     return f"{dataset_type}{NORM_KEY_SEP}{end_effector_type}"
-
-
-def _list_v2_end_effector_types(ds_stats, min_key, delta_key):
-    """List normalizer scopes under one dataset.
-
-    Supported layout:
-
-        stats[dataset_type][action_key] = stat_dict
-        stats[dataset_type][end_effector_type][action_key] = stat_dict
-
-    The flat / legacy scope is represented by None.
-
-    Example:
-        {
-            "follow_right_ee_cartesian_pos": {...},  # flat
-            "gripper-G": {
-                "follow_right_gripper": {...},
-            },
-            "gripper-H": {
-                "follow_right_gripper": {...},
-            },
-        }
-
-    Returns:
-        [None, "gripper-G", "gripper-H"]
-    """
-
-    if not isinstance(ds_stats, dict) or not ds_stats:
-        return [None]
-
-    def _is_stat_leaf(value):
-        if not isinstance(value, dict):
-            return False
-
-        return (
-            min_key in value or delta_key in value or "min" in value or "q001" in value
-        )
-
-    scopes = []
-
-    for key, value in ds_stats.items():
-
-        # ---------------------------------------------------------
-        # Flat / legacy:
-        #
-        # ds_stats[action_key] = stat_dict
-        # ---------------------------------------------------------
-        if _is_stat_leaf(value):
-            if None not in scopes:
-                scopes.append(None)
-            continue
-
-        # ---------------------------------------------------------
-        # End-effector-specific:
-        #
-        # ds_stats[ee_type][action_key] = stat_dict
-        # ---------------------------------------------------------
-        if isinstance(value, dict):
-            scopes.append(key)
-            continue
-
-        raise ValueError(
-            f"Invalid normalizer entry for key={key!r}: "
-            f"expected stat dict or end-effector dict, "
-            f"got {type(value).__name__}"
-        )
-
-    return scopes or [None]
 
 
 def normalizer_is_identity(normalizer):

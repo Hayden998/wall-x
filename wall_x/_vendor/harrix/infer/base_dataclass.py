@@ -6,7 +6,7 @@ import torch
 import wall_x._vendor.x2robot_utils.geometry as data_utils
 from wall_x._vendor.harrix.infer import body_frame
 from wall_x._vendor.harrix.infer.logger import InferLogger
-from wall_x._vendor.harrix.utils.dataset_v2 import resolve_relative_action_frame
+from wall_x._vendor.harrix.utils.processor_config import resolve_relative_action_frame
 
 dof_dims = {
     "left_ee_cartesian_pos": 3,

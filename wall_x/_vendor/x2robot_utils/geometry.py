@@ -1,6 +1,6 @@
 """Rotation / pose geometry utilities (pure numpy + numba).
 
-Shared between wall-x and internal_dataset_backend:
+Shared by the training data pipeline and inference:
 - ``euler_to_matrix_zyx_6d_nb``: ZYX Euler → flattened top-2-rows of R (N, 6)
 - ``so3_to_euler_zyx_batch_nb``: 6D rotation → ZYX Euler (canonicalized)
 - ``compose_state_and_delta_to_abs_{rpy,6d}``: state ⊕ delta → absolute pose
@@ -301,9 +301,8 @@ def compose_state_and_delta_to_abs_6d(delta, state):
 def compute_delta_from_state_and_abs_rot(rotations, state):
     """Absolute rotations -> delta relative to ``state`` (inverse of compose_*).
 
-    Ported verbatim from internal_dataset_backend.common.data_utils so this shared
-    geometry module carries the full forward+inverse pair the RTC serving
-    abs->relative conversion needs. rotations: (N, 3|6); state: (3|6,).
+    Completes the forward+inverse pair that the RTC serving abs->relative
+    conversion needs. rotations: (N, 3|6); state: (3|6,).
     """
     if rotations.shape[-1] == 3:
         rotations_matrix = euler_to_matrix_zyx_batch_nb(rotations)

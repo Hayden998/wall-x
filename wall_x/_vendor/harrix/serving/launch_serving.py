@@ -105,10 +105,10 @@ class ServerModelConfig:
 
     # Please specify explicitly if the checkpoint was not trained on the x2robot dataset.
     norm_key: str | None = None
-    # Dataset V2 normalizer discriminator. None keeps legacy flat-key behavior
+    # Normalizer key discriminator. None keeps legacy flat-key behavior
     # and auto-resolves a single unambiguous composite key.
     end_effector_type: str | None = None
-    # Optional serving-host override for Dataset V2 stats.
+    # Optional serving-host override for the normalizer stats.
     normalizer_stats_path: str | None = None
     # Remove the discretized state string from the prompt while preserving the
     # checkpoint's state-string model topology.

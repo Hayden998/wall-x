@@ -113,8 +113,8 @@ class VLAdapter(ModelAdapter):
         flat["model_type"] = self.cfg.model_type
         flat["data"] = dict(self.cfg._raw_data or {})
         # Model topology and data processing must use the same authoritative
-        # task-level switch.  In particular, Dataset V2 keeps its processing
-        # copy under processors.epilogue.params rather than the legacy
+        # task-level switch.  In particular, a saved processor config keeps its
+        # processing copy under processors.epilogue.params rather than the legacy
         # ``data:`` section.  Leaving this field absent here makes the Qwen
         # configs default it to False and creates ``action_processor.propri_proj``
         # even when task.use_state_string_representation is True.

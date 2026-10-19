@@ -28,14 +28,12 @@ from wall_x._vendor.x2robot_utils.grounding import (
 
 from wall_x._vendor.harrix.infer.infer_config import (
     InferConfig,
-    resolve_embodiment_type,
     resolve_prompt_dataset_family,
 )
-from wall_x._vendor.harrix.utils.dataset_v2 import (
+from wall_x._vendor.harrix.utils.processor_config import (
     InferenceDataConfig,
-    build_dataset_v2_text_processor,
-    dataset_v2_smart_resize,
-    inject_dataset_v2_state_strings,
+    inject_state_strings,
+    processor_smart_resize,
     replace_state_schema_placeholder,
     validate_inference_data_semantics,
 )
@@ -53,7 +51,7 @@ from wall_x.data.backends.lerobot.utils import NormStats
 
 ENABLE_FAST_PREPROCESS = os.getenv("ENABLE_FAST_PREPROCESS", "False").lower() == "true"
 # Move the image resize (currently CPU cv2/PIL BICUBIC) onto the GPU with
-# torch bicubic + antialias. Sizing (dataset_v2_smart_resize) is unchanged, so
+# torch bicubic + antialias. Sizing (processor_smart_resize) is unchanged, so
 # image_grid_thw is identical; only the interpolation kernel differs, which is
 # NOT bit-identical to PIL BICUBIC (see docs/gpu_resize verification).
 # Default ON: a seeded 5-episode 5090 A/B showed the resulting open-loop L1
@@ -133,7 +131,7 @@ class WallxModelWrapper:
         # ``norm_key`` stays the bare dataset_type (used e.g. for the embodied
         # prompt). ``norm_dataset_key`` is the key actually used to index the
         # normalizer -- possibly the composite "dataset_type/end_effector_type"
-        # (x2robot_v2 stats are keyed by both). Resolution order: explicit
+        # (stats may be keyed by both). Resolution order: explicit
         # end_effector_type -> exact match -> unique composite -> legacy fallback.
         available_action_keys = set(self.normalizer_action.min.keys())
         available_propri_keys = set(self.normalizer_propri.min.keys())
@@ -159,7 +157,7 @@ class WallxModelWrapper:
                 f"available_keys={available_keys}"
             )
 
-        # 2) exact match (flat stats entry, or lerobot / x2robot_v1 bare key).
+        # 2) exact match (flat stats entry or bare dataset key).
         if self.norm_key in available_keys:
             self.norm_dataset_key = self.norm_key
             return
@@ -460,12 +458,6 @@ class WallxModelWrapper:
         batch_size = len(observation)
         dataset_names = [self.norm_dataset_key] * batch_size
         self.logger.debug("[NormDebug] dataset_names=%s", dataset_names)
-        is_dataset_v2 = self.config.cfg.data.dataset_type == "x2robot_v2"
-        padding_side = (
-            getattr(self.config.data_config, "padding_side", "right")
-            if is_dataset_v2
-            else "left"
-        )
         state_bins = getattr(
             self.config.data_config,
             "state_bins",
@@ -553,7 +545,7 @@ class WallxModelWrapper:
             and "proprioception" in additional_inputs
         )
         if state_was_injected:
-            prefix_text = inject_dataset_v2_state_strings(
+            prefix_text = inject_state_strings(
                 prefix_text,
                 additional_inputs["proprioception"],
                 additional_inputs["agent_pos_mask"],
@@ -571,7 +563,7 @@ class WallxModelWrapper:
                 images=image_inputs,
                 videos=None,
                 padding=True,
-                padding_side=padding_side,
+                padding_side="left",
                 # Right truncation would drop the trailing action tokens.
                 truncation=False,
                 return_tensors="pt",
@@ -599,21 +591,6 @@ class WallxModelWrapper:
                 inference_mode=True,
             )
 
-        if is_dataset_v2:
-            max_seq_length = self.config.data_config.max_seq_length
-            sequence_lengths = inputs["attention_mask"].sum(dim=1)
-            overlong = sequence_lengths > max_seq_length
-            if bool(overlong.any().item()):
-                rows = overlong.nonzero(as_tuple=True)[0].tolist()
-                details = {row: int(sequence_lengths[row].item()) for row in rows}
-                raise ValueError(
-                    "Inference input exceeds the training max_seq_length without "
-                    "truncation: "
-                    f"limit={max_seq_length}, rows={details}, "
-                    f"images={len(image_inputs)}, "
-                    f"action_horizon={self.config.action_horizon}"
-                )
-
         with ScopeTimer("convert_action_token_id and post "):
             action_token_id = self.model.processor.tokenizer.convert_tokens_to_ids(
                 "<|action|>"
@@ -628,19 +605,11 @@ class WallxModelWrapper:
         return inputs
 
     def get_text_for_dllm_action(self, instruction):
-        text_type = getattr(self.config.data_config, "text_processor_type", "")
         text_params = getattr(self.config.data_config, "text_processor_params", {})
-        dataset_text_processor = self._get_dataset_v2_text_processor(text_type)
-        prologue = self._get_action_prologue(
-            text_params, dataset_text_processor
-        )
+        prologue = self._get_action_prologue(text_params)
         user_request = f"{self.role_start_symbol}user\nObservation:"
         for cam_name in self.cam_names:
-            display_name = (
-                dataset_text_processor.cam_name_mapping.get(cam_name, cam_name)
-                if dataset_text_processor is not None
-                else _CAM_NAME_MAPPING[cam_name]
-            )
+            display_name = _CAM_NAME_MAPPING[cam_name]
             user_request += (
                 f" {display_name}: {self.vision_start_symbol}"
                 f"{self.image_pad_symbol}{self.vision_end_symbol}"
@@ -668,18 +637,10 @@ class WallxModelWrapper:
     def get_text_for_action(self, instruction):
         text_type = getattr(self.config.data_config, "text_processor_type", "")
         text_params = getattr(self.config.data_config, "text_processor_params", {})
-        dataset_text_processor = self._get_dataset_v2_text_processor(text_type)
-        prologue = self._get_action_prologue(
-            text_params, dataset_text_processor
-        )
+        prologue = self._get_action_prologue(text_params)
         user_request = f"{self.role_start_symbol}user\nObservation:"
         for cam_name in self.cam_names:
-            if dataset_text_processor is not None:
-                display_name = dataset_text_processor.cam_name_mapping.get(
-                    cam_name, cam_name
-                )
-            else:
-                display_name = _CAM_NAME_MAPPING[cam_name]
+            display_name = _CAM_NAME_MAPPING[cam_name]
             user_request += (
                 f" {display_name}: {self.vision_start_symbol}"
                 f"{self.image_pad_symbol}{self.vision_end_symbol}"
@@ -722,7 +683,7 @@ class WallxModelWrapper:
                 "text processor action_chunk_size does not match inference "
                 f"action_horizon: {configured_horizon} != {self.config.action_horizon}"
             )
-        # Dataset V2 strips <|action_ar|><|im_end|> when no ground-truth AR
+        # Training strips <|action_ar|><|im_end|> when no ground-truth AR
         # action is present. Online flow inference follows that exact branch.
         flow_action = f"{self.action_symbol * configured_horizon}"
 
@@ -742,7 +703,7 @@ class WallxModelWrapper:
         data = self.config.train_config.get("data") or {}
         return data.get("instruction_label") or "Instruction"
 
-    def _get_action_prologue(self, text_params, dataset_text_processor):
+    def _get_action_prologue(self, text_params):
         """Build the shared flow/AR/RTC/DLLM inference system prompt."""
         system_prompt = self._configured_system_prompt()
         if system_prompt:
@@ -764,20 +725,6 @@ class WallxModelWrapper:
 
         prompt_dataset_family = resolve_prompt_dataset_family(self.norm_key)
         cam_name_mapping = {cam_name: cam_name for cam_name in self.cam_names}
-        if dataset_text_processor is not None:
-            embodiment_type = getattr(self.config, "embodiment_type", None)
-            if embodiment_type is None:
-                embodiment_type = resolve_embodiment_type(
-                    getattr(self.config, "robot_type", "desktop"),
-                    prompt_dataset_family,
-                )
-            return dataset_text_processor._build_embodied_prologue(
-                prompt_dataset_family,
-                cam_name_mapping,
-                str(getattr(self.config, "robot_id", "")),
-                "",
-                embodiment_type=embodiment_type,
-            )
         return get_prologue_with_embodied_information(
             dataset_name=prompt_dataset_family,
             cam_mapping=cam_name_mapping,
@@ -792,15 +739,10 @@ class WallxModelWrapper:
         max_words = int(text_params.get("max_instruction_words", 256))
         if len(words) > max_words:
             raise ValueError(
-                "Runtime instruction exceeds the Dataset V2 text processor "
+                "Runtime instruction exceeds the text processor "
                 f"limit: words={len(words)}, max_instruction_words={max_words}"
             )
         return " ".join(words)
-
-    def _get_dataset_v2_text_processor(self, text_type):
-        """Public builds have no Dataset V2 text processor; use generic prompts."""
-        del text_type
-        return None
 
     @timer
     def get_text_for_subtask_generation(self, instruction):
@@ -863,14 +805,11 @@ class WallxModelWrapper:
             else:
                 current_width, current_height = orig_width, orig_height
 
-            use_dataset_resize = (
-                getattr(self.config.data_config, "dataset_type", "")
-                == "x2robot_v2"
-                or getattr(self.config.data_config, "vision_processor_type", "")
-                in ("qwen3", "qwen3_5")
-            )
+            use_processor_resize = getattr(
+                self.config.data_config, "vision_processor_type", ""
+            ) in ("qwen3", "qwen3_5")
             resize_fn = (
-                dataset_v2_smart_resize if use_dataset_resize else qwen_smart_resize
+                processor_smart_resize if use_processor_resize else qwen_smart_resize
             )
             resized_height, resized_width = resize_fn(
                 current_height,
@@ -879,7 +818,7 @@ class WallxModelWrapper:
                 min_pixels=self.config.data_config.min_pixels,
                 max_pixels=self.config.data_config.max_pixels,
             )
-            # Dataset V2 validation performs one resize from the original image
+            # Training validation performs one resize from the original image
             # using torchvision BICUBIC. PIL's BICUBIC path is equivalent here
             # and avoids the old two-stage interpolation.
             resized_img = img_pil.resize(
@@ -896,7 +835,7 @@ class WallxModelWrapper:
     def _resize_images_gpu(self, observation):
         """GPU counterpart of ``_resize_images``.
 
-        Identical target sizing (``dataset_v2_smart_resize`` / ``qwen_smart_resize``)
+        Identical target sizing (``processor_smart_resize`` / ``qwen_smart_resize``)
         so ``image_grid_thw`` is unchanged; only the resample runs on the GPU via
         ``F.interpolate(mode="bicubic", antialias=True)`` instead of PIL BICUBIC.
         The GPU bicubic kernel is not bit-identical to PIL, so pixel_values differ
@@ -911,13 +850,7 @@ class WallxModelWrapper:
             "qwen3",
             "qwen3_5",
         )
-        use_dataset_resize = (
-            getattr(self.config.data_config, "dataset_type", "") == "x2robot_v2"
-            or is_qwen3
-        )
-        resize_fn = (
-            dataset_v2_smart_resize if use_dataset_resize else qwen_smart_resize
-        )
+        resize_fn = processor_smart_resize if is_qwen3 else qwen_smart_resize
 
         image_inputs = []
         for key in self.cam_names:
@@ -988,7 +921,7 @@ class WallxModelWrapper:
             self._passes_pil_images()
             or getattr(self.config.data_config, "is_dino_vision", False)
         ):
-            # Keep the Dataset V2/Qwen3.5 path pixel-consistent. The cv2 fast
+            # Keep the Qwen3.5 path pixel-consistent. The cv2 fast
             # path has different cubic coefficients and used a hard-coded
             # camera list.
             return self._resize_images(observation)
@@ -1267,7 +1200,7 @@ class WallxModelWrapper:
             # Qwen3.5's cached flow path requires every row to begin its action
             # block at the same position and to have no right-padding after it.
             # Preprocess samples independently, bucket identical layouts, then
-            # restore caller order. This preserves Dataset V2 positions instead
+            # restore caller order. This preserves training positions instead
             # of inserting artificial padding between prompt and action.
             buckets = defaultdict(list)
             for index, (observation, instruction) in enumerate(

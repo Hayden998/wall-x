@@ -16,8 +16,6 @@ import numpy as np
 import torch
 from PIL import Image
 
-from qwen_vl_utils.vision_process import smart_resize as qwen_smart_resize
-
 from wall_x._vendor.x2robot_utils.text_templates import (
     get_prologue_with_embodied_information,
     preprocesser_call,
@@ -31,11 +29,9 @@ from wall_x._vendor.harrix.infer.infer_config import (
     resolve_prompt_dataset_family,
 )
 from wall_x._vendor.harrix.utils.ckpt_load import load_state_dict
-from wall_x._vendor.harrix.utils.dataset_v2 import (
-    InferenceDataConfig,
-    build_dataset_v2_text_processor,
-    dataset_v2_smart_resize,
-    inject_dataset_v2_state_strings,
+from wall_x._vendor.harrix.utils.processor_config import (
+    inject_state_strings,
+    processor_smart_resize,
     replace_state_schema_placeholder,
     validate_inference_data_semantics,
 )
@@ -162,7 +158,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
         self._normalizer_action = normalizer_action
         self._normalizer_propri = normalizer_propri
         # Keep the bare dataset key for prompt semantics. Only normalization
-        # should see the Dataset V2 composite dataset/end-effector key.
+        # should see the composite dataset/end-effector key.
         self._prompt_norm_key = cfg.model.norm_key
         self._norm_key = resolved_norm_key
 
@@ -219,8 +215,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
         self._embodiment_type = resolve_embodiment_type(
             self._robot_type, self._prompt_norm_key
         )
-        if isinstance(self._data_config, InferenceDataConfig):
-            validate_inference_data_semantics(self._data_config, self._action_horizon)
+        validate_inference_data_semantics(self._data_config, self._action_horizon)
 
     # ---- BaseInferAdapter API ----
 
@@ -332,10 +327,9 @@ class QwenVLActInferAdapter(BaseInferAdapter):
         *,
         robot_id: str | int | None = None,
     ) -> tuple[str, str]:
-        """Build the Dataset V2 post-epilogue flow prompt."""
+        """Build the post-epilogue flow prompt."""
         text_type = getattr(self._data_config, "text_processor_type", "")
         text_params = getattr(self._data_config, "text_processor_params", {})
-        text_processor = self._get_dataset_v2_text_processor()
         embodied_ratio = text_params.get(
             "use_embodied_prompt_ratio",
             getattr(self._typed_cfg.data, "use_embodied_system_prompt_ratio", 0),
@@ -350,27 +344,13 @@ class QwenVLActInferAdapter(BaseInferAdapter):
                 getattr(self, "_prompt_norm_key", self._norm_key)
             )
             cam_name_mapping = {cn: cn for cn in self._cam_names}
-            if text_processor is not None:
-                embodiment_type = getattr(self, "_embodiment_type", None)
-                if embodiment_type is None:
-                    embodiment_type = resolve_embodiment_type(
-                        getattr(self, "_robot_type", "desktop"), prompt_norm_key
-                    )
-                prologue = text_processor._build_embodied_prologue(
-                    prompt_norm_key,
-                    cam_name_mapping,
-                    str(robot_id),
-                    "",
-                    embodiment_type=embodiment_type,
-                )
-            else:
-                prologue = get_prologue_with_embodied_information(
-                    dataset_name=prompt_norm_key,
-                    cam_mapping=cam_name_mapping,
-                    robot_id=robot_id,
-                    uid="",
-                    config=self._data_config,
-                )
+            prologue = get_prologue_with_embodied_information(
+                dataset_name=prompt_norm_key,
+                cam_mapping=cam_name_mapping,
+                robot_id=robot_id,
+                uid="",
+                config=self._data_config,
+            )
         else:
             prologue = f"{_ROLE_START}system\nYou are a helpful assistant.{_ROLE_END}\n"
         user_request = f"{_ROLE_START}user\nObservation:"
@@ -382,9 +362,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
             else None
         )
         for cn in self._cam_names:
-            if text_processor is not None:
-                display_name = text_processor.cam_name_mapping.get(cn, cn)
-            elif lerobot_cam_mapping is not None:
+            if lerobot_cam_mapping is not None:
                 display_name = lerobot_cam_mapping.get(cn, cn)
             else:
                 display_name = _camera_label(cn)
@@ -419,22 +397,11 @@ class QwenVLActInferAdapter(BaseInferAdapter):
         assistant_message = f"{_ROLE_START}assistant\n"
         flow_action = _ACTION * self._action_horizon
 
-        prefix_text = prologue + user_message + assistant_message
-        if isinstance(self._data_config, InferenceDataConfig):
-            prefix_text = replace_state_schema_placeholder(
-                prefix_text, self._data_config
-            )
+        prefix_text = replace_state_schema_placeholder(
+            prologue + user_message + assistant_message, self._data_config
+        )
         postfix_text = flow_action
         return prefix_text, postfix_text
-
-    def _get_dataset_v2_text_processor(self):
-        if not isinstance(self._data_config, InferenceDataConfig):
-            return None
-        cached = getattr(self, "_dataset_v2_text_processor", None)
-        if cached is None:
-            cached = build_dataset_v2_text_processor(self._data_config)
-            self._dataset_v2_text_processor = cached
-        return cached
 
     def _sanitize_instruction(self, value) -> str:
         text = " ".join(str(value or "").strip().split())
@@ -445,7 +412,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
         )
         if len(text.split()) > max_words:
             raise ValueError(
-                "Runtime instruction exceeds the Dataset V2 text processor "
+                "Runtime instruction exceeds the text processor "
                 f"limit: max_instruction_words={max_words}"
             )
         return text
@@ -491,32 +458,19 @@ class QwenVLActInferAdapter(BaseInferAdapter):
                     else (image.shape[1], image.shape[0])
                 )
 
-        is_dataset_v2 = isinstance(self._data_config, InferenceDataConfig)
-        state_keep_dims = (
-            self._data_config.epilogue_params.get(
-                "state_string_keep_dims_by_dataset", {}
-            )
-            if is_dataset_v2
-            else {}
+        data_config = self._data_config
+        state_keep_dims = data_config.epilogue_params.get(
+            "state_string_keep_dims_by_dataset", {}
         )
-        use_state_string = (
-            self._data_config.use_state_string_representation
-            if is_dataset_v2
-            else self._typed_cfg.task.use_state_string_representation
-            and not getattr(self._typed_cfg.data, "state_string_placeholder_only", False)
-        )
+        use_state_string = data_config.use_state_string_representation
         state_was_injected = bool(use_state_string and state_keep_dims)
         if state_was_injected:
-            prefix_list = inject_dataset_v2_state_strings(
+            prefix_list = inject_state_strings(
                 prefix_list,
                 agent_pos,
                 agent_pos_mask,
                 dataset_names,
-                state_bins=(
-                    self._data_config.state_bins
-                    if is_dataset_v2
-                    else getattr(self._typed_cfg.data, "state_bins", 256)
-                ),
+                state_bins=data_config.state_bins,
                 keep_dims_by_dataset=state_keep_dims,
                 state_drop=bool(self._state_drop),
             )
@@ -527,17 +481,13 @@ class QwenVLActInferAdapter(BaseInferAdapter):
             images=image_inputs,
             videos=None,
             padding=True,
-            padding_side=(self._data_config.padding_side if is_dataset_v2 else "left"),
-            truncation=not is_dataset_v2,
+            padding_side=data_config.padding_side,
+            truncation=False,
             return_tensors="pt",
-            max_length=None if is_dataset_v2 else 1000,
+            max_length=None,
             pad_to_128_multiple=False,
             pad_prefix_to_same_length=bool(
-                self._data_config.epilogue_params.get(
-                    "pad_prefix_to_same_length", False
-                )
-                if is_dataset_v2
-                else False
+                data_config.epilogue_params.get("pad_prefix_to_same_length", False)
             ),
             norm_state=(
                 agent_pos
@@ -548,25 +498,20 @@ class QwenVLActInferAdapter(BaseInferAdapter):
             state_augmentation_prob=0.0,
             state_drop_prob=1.0 if self._state_drop else 0.0,
             state_augmentation_ratio=0.0,
-            state_bins=(
-                self._data_config.state_bins
-                if is_dataset_v2
-                else getattr(self._typed_cfg.data, "state_bins", 256)
-            ),
+            state_bins=data_config.state_bins,
             inference_mode=True,
         )
 
-        if is_dataset_v2:
-            sequence_lengths = inputs["attention_mask"].sum(dim=1)
-            overlong = sequence_lengths > self._data_config.max_seq_length
-            if bool(overlong.any().item()):
-                rows = overlong.nonzero(as_tuple=True)[0].tolist()
-                details = {row: int(sequence_lengths[row].item()) for row in rows}
-                raise ValueError(
-                    "Inference input exceeds the training max_seq_length without "
-                    f"truncation: limit={self._data_config.max_seq_length}, "
-                    f"rows={details}"
-                )
+        sequence_lengths = inputs["attention_mask"].sum(dim=1)
+        overlong = sequence_lengths > data_config.max_seq_length
+        if bool(overlong.any().item()):
+            rows = overlong.nonzero(as_tuple=True)[0].tolist()
+            details = {row: int(sequence_lengths[row].item()) for row in rows}
+            raise ValueError(
+                "Inference input exceeds the training max_seq_length without "
+                f"truncation: limit={data_config.max_seq_length}, "
+                f"rows={details}"
+            )
 
         action_token_id = self._processor.tokenizer.convert_tokens_to_ids(_ACTION)
         moe_token_types = inputs["input_ids"] == action_token_id
@@ -596,14 +541,12 @@ class QwenVLActInferAdapter(BaseInferAdapter):
             raise ValueError(f"unsupported image type: {type(img)}")
         orig_w, orig_h = pil.size
 
-        is_dataset_v2 = isinstance(self._data_config, InferenceDataConfig)
         if (
-            is_dataset_v2
-            and self._data_config.resolution
+            self._data_config.resolution
             and cam_name not in self._data_config.resolution
         ):
             raise ValueError(
-                f"camera {cam_name!r} is absent from the effective Dataset V2 "
+                f"camera {cam_name!r} is absent from the effective "
                 "vision resolution config"
             )
         target = self._data_config.resolution.get(cam_name, -1)
@@ -615,8 +558,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
         else:
             new_w, new_h = orig_w, orig_h
 
-        resize_fn = dataset_v2_smart_resize if is_dataset_v2 else qwen_smart_resize
-        resized_h, resized_w = resize_fn(
+        resized_h, resized_w = processor_smart_resize(
             new_h,
             new_w,
             factor=self._data_config.image_factor,
@@ -624,7 +566,7 @@ class QwenVLActInferAdapter(BaseInferAdapter):
             max_pixels=self._data_config.max_pixels,
         )
         resized = pil.resize((resized_w, resized_h), Image.Resampling.BICUBIC)
-        if is_dataset_v2 and self._data_config.vision_processor_type in (
+        if self._data_config.vision_processor_type in (
             "qwen3",
             "qwen3_5",
         ):

@@ -1,4 +1,4 @@
-"""Shared Dataset Config V2 projection used by Harrix inference stacks."""
+"""Project a checkpoint's saved processor config onto inference inputs."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ _STATE_SCHEMA_LABELS = {
 
 @dataclass
 class InferenceDataConfig:
-    """Processor semantics needed to reproduce Dataset V2 inputs online."""
+    """Processor semantics needed to reproduce training inputs online."""
 
     resolution: dict[str, int] = field(default_factory=dict)
     model_type: str = "qwen2_5"
@@ -73,9 +73,10 @@ class InferenceDataConfig:
 def resolve_relative_action_frame(data_config: Any) -> str:
     """Resolve the checkpoint's relative EEF convention, defaulting legacy saves.
 
-    Dataset V2 stores this under ``processors.action.params``.  Inference keeps
-    those params intact on :class:`InferenceDataConfig`; dict support is kept for
-    older serving wrappers.
+    The saved processor config stores this under ``processors.action.params``.
+    Inference keeps
+    those params intact on :class:`InferenceDataConfig`; dict support is kept
+    for older serving wrappers.
     """
     if isinstance(data_config, dict):
         params = data_config.get("action_processor_params") or {}
@@ -122,7 +123,7 @@ def merge_private_data_config(cfg, train_config: dict) -> dict:
 def normalize_dataset_config_for_inference(
     train_config: dict,
 ) -> tuple[dict[str, Any], str]:
-    """Overlay effective Dataset V2 processor values onto ``data``.
+    """Overlay the saved effective processor values onto ``data``.
 
     The checkpoint-embedded effective config is authoritative.  The external
     YAML path is retained only as a compatibility fallback for older saves.
@@ -252,75 +253,15 @@ def build_inference_data_config(
         dataset_config_source=source,
     )
     if (
-        result.model_type == "qwen3_5"
-        and dataset_type == "x2robot_v2"
-        and result.vision_processor_type == "default"
-        and result.image_factor == _QWEN35_FACTOR
-        and _has_compatible_qwen35_image_processor(train_config)
-    ):
-        # Older runs used VideoVisionProcessor (default) with factor=32.
-        # Select the Qwen inference path only after resolving resize values:
-        # relabeling the saved config earlier would change min/max defaults.
-        result.vision_processor_type = "qwen3_5"
-
-    qwen35_vision_type_is_valid = result.vision_processor_type in (
-        "qwen3",
-        "qwen3_5",
-    )
-    if result.vision_processor_type == "default" and dino_image_factor is not None:
-        qwen35_vision_type_is_valid = result.image_factor == dino_image_factor
-        if not qwen35_vision_type_is_valid:
-            raise ValueError(
-                "DINO inference image_factor must match patch_size * merge_size: "
-                f"configured={result.image_factor}, expected={dino_image_factor}"
-            )
-    if (
-        train_config.get("model_type") == "qwen3_5"
-        and dataset_type == "x2robot_v2"
-        and not qwen35_vision_type_is_valid
+        result.vision_processor_type == "default"
+        and dino_image_factor is not None
+        and result.image_factor != dino_image_factor
     ):
         raise ValueError(
-            "qwen3_5 inference requires Dataset V2 vision processor type "
-            "qwen3_5/qwen3, or type default backed by a compatible Qwen3.5 "
-            "image processor with image_factor=32, or a compatible DINO "
-            f"processor; got {result.vision_processor_type!r} from "
-            f"{result.dataset_config_source}"
+            "DINO inference image_factor must match patch_size * merge_size: "
+            f"configured={result.image_factor}, expected={dino_image_factor}"
         )
     return result
-
-
-def _has_compatible_qwen35_image_processor(train_config: dict) -> bool:
-    """Recognize legacy stock Qwen processors without loading model weights."""
-    model = train_config.get("model") or {}
-    processor_path = model.get("processor_path") or train_config.get("processor_path")
-    if not processor_path:
-        return False
-    for filename in ("processor_config.json", "preprocessor_config.json"):
-        path = os.path.join(os.fspath(processor_path), filename)
-        if not os.path.isfile(path):
-            continue
-        try:
-            with open(path, encoding="utf-8") as stream:
-                config = json.load(stream)
-            image = config.get("image_processor", config)
-            if image.get("image_processor_type") in (
-                "Qwen2VLImageProcessor",
-                "Qwen2VLImageProcessorFast",
-                "Qwen3VLImageProcessor",
-                "Qwen3VLImageProcessorFast",
-            ) and (
-                int(image.get("patch_size", 0)),
-                int(image.get("merge_size", 0)),
-                int(image.get("temporal_patch_size", 0)),
-            ) == (
-                16,
-                2,
-                2,
-            ):
-                return True
-        except (OSError, ValueError, TypeError, AttributeError) as exc:
-            logger.warning("Failed to inspect processor config %s: %s", path, exc)
-    return False
 
 
 def _resolve_dino_image_factor(train_config: dict) -> int | None:
@@ -353,7 +294,7 @@ def _resolve_dino_image_factor(train_config: dict) -> int | None:
     return patch_size * merge_size
 
 
-def dataset_v2_smart_resize(
+def processor_smart_resize(
     height: int,
     width: int,
     *,
@@ -361,7 +302,7 @@ def dataset_v2_smart_resize(
     min_pixels: int,
     max_pixels: int,
 ) -> tuple[int, int]:
-    """Bit-for-bit sizing logic from Dataset V2's vision processor."""
+    """Bit-for-bit sizing logic of the training vision processor."""
     if height < 1 or width < 1:
         return factor, factor
     h_bar = max(factor, round(height / factor) * factor)
@@ -377,23 +318,18 @@ def dataset_v2_smart_resize(
     return h_bar, w_bar
 
 
-def build_dataset_v2_text_processor(data_config: InferenceDataConfig):
-    """Public builds have no Dataset V2 text processor; use generic prompts."""
-    return None
-
-
 def replace_state_schema_placeholder(
     text: str,
     data_config: InferenceDataConfig,
 ) -> str:
-    """Apply Dataset V2 WallxEpilogue's state-schema replacement online."""
+    """Apply the training epilogue's state-schema replacement online."""
     placeholder = "<|state_schema|>"
     if placeholder not in text:
         return text
     schema_keys = data_config.epilogue_params.get("state_schema_keys")
     if not isinstance(schema_keys, dict) or not schema_keys:
         raise ValueError(
-            "Dataset V2 enables the state-schema prompt, but "
+            "The saved processor config enables the state-schema prompt, but "
             "epilogue.params.state_schema_keys is missing"
         )
     parts = []
@@ -404,7 +340,7 @@ def replace_state_schema_placeholder(
     return text.replace(placeholder, " + ".join(parts))
 
 
-def inject_dataset_v2_state_strings(
+def inject_state_strings(
     prefix_text: list[str],
     norm_state: Any,
     agent_pos_mask: Any,
@@ -435,12 +371,12 @@ def inject_dataset_v2_state_strings(
         mask_np = mask_np[:, 0, :]
     if state_np.ndim != 2 or mask_np.shape != state_np.shape:
         raise ValueError(
-            "Dataset V2 state injection requires matching [B, D] or [B, T, D] "
+            "State injection requires matching [B, D] or [B, T, D] "
             f"state/mask arrays; got state={state_np.shape}, mask={mask_np.shape}"
         )
     if len(dataset_names) != state_np.shape[0]:
         raise ValueError(
-            "Dataset V2 state injection dataset-name count does not match state "
+            "State injection dataset-name count does not match state "
             f"rows: {len(dataset_names)} != {state_np.shape[0]}"
         )
 
@@ -505,20 +441,20 @@ def validate_inference_data_semantics(
     data_config: InferenceDataConfig,
     action_horizon: int,
 ) -> None:
-    """Fail fast when saved Dataset V2 semantics cannot be reproduced."""
+    """Fail fast when saved processor semantics cannot be reproduced."""
     if data_config.text_processor_type not in (
         "",
         "wallx",
         "wallx_task_instruction",
     ):
         raise NotImplementedError(
-            "flow inference cannot reproduce Dataset V2 text processor "
+            "flow inference cannot reproduce saved text processor "
             f"{data_config.text_processor_type!r}"
         )
     trained_horizon = data_config.text_processor_params.get("action_chunk_size")
     if trained_horizon is not None and int(trained_horizon) != int(action_horizon):
         raise ValueError(
-            "inference action_horizon does not match Dataset V2 "
+            "inference action_horizon does not match saved "
             "processors.text.params.action_chunk_size: "
             f"{action_horizon} != {trained_horizon}"
         )
@@ -527,7 +463,7 @@ def validate_inference_data_semantics(
         != "smart_resize"
     ):
         raise NotImplementedError(
-            "flow inference currently supports only Dataset V2 "
+            "flow inference currently supports only "
             "vision resize_mode='smart_resize'"
         )
     unsupported = []
@@ -539,6 +475,6 @@ def validate_inference_data_semantics(
             unsupported.append(key)
     if unsupported:
         raise NotImplementedError(
-            "flow inference cannot yet reproduce these Dataset V2 epilogue "
+            "flow inference cannot yet reproduce these saved epilogue "
             f"settings: {unsupported}"
         )

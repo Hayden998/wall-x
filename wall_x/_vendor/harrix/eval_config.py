@@ -58,10 +58,10 @@ class ModelSection:
     checkpoint_path: str = ""
     train_config_path: Optional[str] = None
     norm_key: str = "libero_all"
-    # Runtime robot family used to recover Dataset V2 embodiment metadata for
-    # native X2 checkpoints. External datasets ignore this field.
+    # Runtime robot family used to recover embodiment metadata for the
+    # embodied system prompt. External datasets ignore this field.
     robot_type: str = "desktop"
-    # Dataset V2 normalizer discriminator. Optional for legacy flat keys and
+    # Normalizer key discriminator. Optional for legacy flat keys and
     # checkpoints with a single unambiguous end-effector type.
     end_effector_type: Optional[str] = None
     # Remove the discretized state string from the prompt. Default preserves

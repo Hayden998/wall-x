@@ -188,7 +188,7 @@ class WallXRoboDojoPolicy:
     """Stateless flow policy: each request is answered from its own observation."""
 
     def __init__(self, config: RoboDojoPolicyConfig, infer_config=None):
-        from wall_x._vendor.harrix.utils.dataset_v2 import (
+        from wall_x._vendor.harrix.utils.processor_config import (
             resolve_relative_action_frame,
         )
 

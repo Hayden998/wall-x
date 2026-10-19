@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Any
 
-from wall_x._vendor.harrix.utils.dataset_v2 import (
+from wall_x._vendor.harrix.utils.processor_config import (
     InferenceDataConfig,
     build_inference_data_config,
     merge_private_data_config,
@@ -102,12 +102,12 @@ class InferConfig:
         model_device: str = "cuda:0",
         num_inference_timesteps: int = 10,
         norm_key: str = "x2_normal",  # ["x2_normal", "ex_normal"]
-        # Optional end_effector_type for x2robot_v2 ckpts whose normalizer is keyed
+        # Optional end_effector_type for ckpts whose normalizer is keyed
         # by the composite "dataset_type/ee_type". When set, the normalizer key is resolved as
         # make_norm_key(norm_key, end_effector_type). Leave None for a single /
-        # auto-resolvable end_effector_type or for lerobot / x2robot_v1.
+        # auto-resolvable end_effector_type or for flat normalizer keys.
         end_effector_type: str | None = None,
-        # Optional serving-host override for Dataset V2 normalizer JSON.
+        # Optional serving-host override for the normalizer stats JSON.
         normalizer_stats_path: str | None = None,
         # Drop the discretized state string from the text prompt.  This keeps
         # the checkpoint's model topology unchanged and only affects online
@@ -274,7 +274,7 @@ class InferConfig:
         )
         self.train_config = dump_config(self.cfg)
         # ``dump_config`` intentionally omits TrainConfig's private raw fields,
-        # but Dataset V2 stores its fully materialized processor contract in
+        # but the saved processor config is fully materialized in
         # ``_raw_data.dataset_config_effective``. Preserve it for serving and
         # let typed/materialized data fields win only at the same level.
         merge_private_data_config(self.cfg, self.train_config)

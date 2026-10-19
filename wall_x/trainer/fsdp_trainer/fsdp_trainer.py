@@ -1250,7 +1250,7 @@ class FSDPTrainer(DistributedTrainer):
 
     @staticmethod
     def _validate_packed_batch_protocol(batch) -> None:
-        """Fail before forward if Dataset V2's packing contract is incomplete."""
+        """Fail before forward if the packed batch contract is incomplete."""
         if not isinstance(batch, dict):
             raise TypeError("Packed loader must yield a dictionary batch")
         input_ids = batch.get("input_ids")
