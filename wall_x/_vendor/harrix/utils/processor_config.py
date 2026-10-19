@@ -248,8 +248,7 @@ def build_inference_data_config(
         padding_side=str(get("padding_side", "left")),
         use_state_string_representation=bool(
             get("use_state_string_representation", False)
-        )
-        and not bool(get("state_string_placeholder_only", False)),
+        ),
         dataset_config_source=source,
     )
     if (

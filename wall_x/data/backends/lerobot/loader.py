@@ -433,12 +433,9 @@ class DataCollator:
         self.beta_alpha = float(self.beta_alpha)
         self.beta_beta = float(self.beta_beta)
         self.use_fast_tokenizer = self.config.get("use_fast_tokenizer", False)
-        # ``state_string_placeholder_only`` keeps <|propri|> as a bare token
-        # (no state digits) for checkpoints trained before state strings
-        # were wired into the LeRobot path.
         self.use_state_string_representation = bool(
             self.config.get("use_state_string_representation", False)
-        ) and not bool(self.config.get("state_string_placeholder_only", False))
+        )
         self.state_bins = int(self.config.get("state_bins", 256))
         self.load_processor()
 

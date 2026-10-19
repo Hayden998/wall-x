@@ -225,9 +225,6 @@ def _build_flat_config(cfg: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         "dof_config": dict(cfg.task.dof_config or {}),
         "agent_pos_config": dict(cfg.task.agent_pos_config or {}),
         "use_state_string_representation": cfg.task.use_state_string_representation,
-        "state_string_placeholder_only": bool(
-            getattr(data, "state_string_placeholder_only", False)
-        ),
         "state_bins": int(
             raw_data.get("state_bins")
             or data_section.get("state_bins")
