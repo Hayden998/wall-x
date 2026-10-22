@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 # here (capability-based — present in the loaded build => used). The current
 # external_accel build does not ship this kernel yet, so dispatch resolves to the
 # PyTorch fallback below.
-try:
-    from external_accel import qwen35_rvq_position_ids as _external_accel_rvq_position_ids
-except Exception:
-    _external_accel_rvq_position_ids = None
+from wall_x.model.core.ops.base import _load_accel_module
+
+_accel = _load_accel_module()
+_external_accel_rvq_position_ids = getattr(_accel, "qwen35_rvq_position_ids", None)
 
 
 def qwen35_rvq_position_ids_available() -> bool:

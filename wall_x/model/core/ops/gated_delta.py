@@ -19,17 +19,13 @@ import os
 import torch
 import torch.nn.functional as F
 
-try:
-    from external_accel import gated_delta_post_conv_pack as _external_accel_pack
-except Exception:
-    _external_accel_pack = None
+from wall_x.model.core.ops.base import _load_accel_module
 
-try:
-    from external_accel import (
-        gated_delta_post_conv_pack_preprocess as _external_accel_preprocess,
-    )
-except Exception:
-    _external_accel_preprocess = None
+_accel = _load_accel_module()
+_external_accel_pack = getattr(_accel, "gated_delta_post_conv_pack", None)
+_external_accel_preprocess = getattr(
+    _accel, "gated_delta_post_conv_pack_preprocess", None
+)
 
 
 def gated_delta_pack_available(reference_tensor: torch.Tensor) -> bool:
