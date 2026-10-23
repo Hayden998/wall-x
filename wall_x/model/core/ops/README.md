@@ -16,10 +16,13 @@ Every operator that can be accelerated by an external_accel kernel MUST:
 
 2. **Import cleanly without external_accel.** Kernel access is wrapped so the module
    imports on a machine with no external_accel:
-   - `OpsProxy` subclasses resolve lazily via `importlib.import_module`.
-   - Plain-function ops use `try: from external_accel import <sym> except Exception: <sym> = None`.
-   The `from external_accel import` line must be indented under `try` (never column-0),
-   so the open-source export grep guard passes.
+   - The package is imported only through `base._load_accel_module()`, which tries
+     `xcompute` then `external_accel` and returns `None` when neither imports (a
+     present-but-broken build logs a warning instead of raising).
+   - `OpsProxy` subclasses resolve lazily through it; plain-function ops read
+     their kernel with `getattr(_load_accel_module(), "<sym>", None)`.
+   Never write a column-0 `from external_accel import`, so the open-source export
+   grep guard passes.
 
 3. **Own a self-contained PyTorch fallback.** The fallback lives **in this
    package**, computes the same result as the kernel, and is a **first-class,

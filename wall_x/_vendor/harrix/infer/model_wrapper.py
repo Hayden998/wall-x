@@ -1535,5 +1535,3 @@ class WallxModelWrapper:
         )
         self.logger.info("saved DLLM action to robot_state_action_data")
         return model_output
-
-# --- layer activation dump (diagnostic) -------------------------------------

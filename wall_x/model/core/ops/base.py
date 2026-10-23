@@ -42,6 +42,9 @@ def _load_accel_module():
             return importlib.import_module(name)
         except ImportError:
             continue
+        except Exception as exc:  # present but unusable: fall back, but say so
+            logger.warning("accelerated kernel package %r failed to import: %s", name, exc)
+            continue
     return None
 
 

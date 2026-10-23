@@ -14,7 +14,6 @@ _external_accel_update_flash_mask = getattr(_accel, "qwen35_update_joint_attenti
 _external_accel_update_position_ids = getattr(_accel, "qwen35_update_position_ids", None)
 
 
-
 def _handle_external_accel_attention_mask_error(exc):
     # Never swallow silently: an intermittently failing kernel degrading to the
     # slow path must be visible in logs.
